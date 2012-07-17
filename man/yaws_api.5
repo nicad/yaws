@@ -131,16 +131,68 @@ Sets a cookie to the browser.
 \fBfind_cookie_val(Cookie, Header)\fR
 This function can be used to search for a cookie that was previously
 set by \fBsetcookie/2-6\fR. For example if we set a cookie
-as \fByaws_api:setcookie("sid",SomeRandomSid) \fR, then on subsequent requests
+as \fByaws_api:setcookie("sid",SomeRandomSid)\fR, then on subsequent requests
 from the browser we can call:
 \fBfind_cookie("sid",(Arg#arg.headers)#headers.cookie)\fR
 
 The function returns [] if no cookie was found, otherwise the actual cookie
 is returned as a string.
 
+.TP
+\fBparse_set_cookie(Str)\fR
+This function parses the value of a \fBSet-Cookie\fR header, following the
+RFC6265. Because old RFCs (2109 and 2965) are still used, it is backward
+compatible. So this function returns a \fI#setcookie{}\fR record when only one
+cookie is found. If multiple cookies are set in a single \fBSet-Cookie\fR
+header, it returns a list of \fI#setcookie{}\fR records. If no cookie was found
+or if an error occurred, it returns [].
+
+\fI#setcookie{}\fR record is defined in \fIyaws_api.hrl\fR:
+\fI
+.nf
+
+-record(setcookie, {key,
+                    value,
+                    quoted = false,
+                    domain,
+                    max_age,
+                    expires,
+                    path,
+                    secure = false,
+                    http_only = false,
+                    extensions = []}).
+.fi
+\fR
 
 .TP
-\fBredirect(Url\fR
+\fBparse_cookie(Str)\fR
+
+This function parses the value of \fBCookie\fR header, following the RFC6265. It
+returns a list of \fI#cookie{}\fR records. If no cookie was found or if an error
+occurred, it returns [].
+
+\fI#cookie{}\fR record is defined in \fIyaws_api.hrl\fR:
+\fI
+.nf
+
+-record(cookie, {key,
+                 value,
+                 quoted = false}).
+.fi
+\fR
+
+.TP
+\fBformat_set_cookie(SetCookie)\fR
+Build a cookie string from a \fI#setcookie{}\fR record like returned by
+\fBparse_set_cookie/1\fR.
+
+.TP
+\fBformat_cookie(Cookie | [Cookie])\fR
+Build a cookie string from a \fI#cookie{}\fR record (or a list or records) like
+returned by \fBparse_cookie/1\fR.
+
+.TP
+\fBredirect(Url)\fR
 This function generates a redirect to the browser.
 It will clear any previously set headers. So to generate
 a redirect \fBand\fR set a cookie, we need to set the cookie after
@@ -416,11 +468,41 @@ character.
 \fBurl_encode(Str)\fR
 Url-encodes a string. All URLs in HTML documents must be URL encoded.
 
+.TP
+\fBget_sslsocket(Socket)\fR
+Returns a socket for SSL sockets or the atom \fIundefined\fR for non-SSL
+sockets. Useful for applications that have to deal with both SSL and
+non-SSL sockets.
 
 .TP
 \fBreformat_header(H)\fR
-Returns a list of reformatted header values from a #header{}
+Returns a list of reformatted header values from a #headers{}
 record. The return list is suitable for retransmit.
+
+.TP
+\fBset_header(Headers, {Header, Value})\fR
+Sets header \fIHeader\fR with value \fIValue\fR in the #headers{} record
+\fIHeaders\fR, and returns a new #headers{} record. Using the atom
+\fIundefined\fR for \fIValue\fR effectively deletes the header, same as
+\fIdelete_header/2\fR.
+
+.TP
+\fBset_header(Headers, Header, Value)\fR
+Sets header \fIHeader\fR with value \fIValue\fR in the #headers{} record
+\fIHeaders\fR, and returns a new #headers{} record. Using the atom
+\fIundefined\fR for \fIValue\fR effectively deletes the header, same as
+\fIdelete_header/2\fR.
+
+.TP
+\fBget_header(Headers, Header)\fR
+Gets the value of header \fIHeader\fR from the #headers{} record
+\fIHeaders\fR and returns it. If the header isn't set, the atom
+\fIundefined\fR is returned.
+
+.TP
+\fBdelete_header(Headers, Header)\fR
+Deletes any value set for header \fIHeader\fR in the #headers{} record
+\fIHeaders\fR, and returns a new #headers{} record.
 
 .TP
 \fBrequest_url(ARG)\fR
@@ -731,11 +813,14 @@ Sets the WWW-Authenticate: header.
 All other headers must be added using the normal HTTP syntax.
 Example:
 
-\fI{header, {"My-X-Header", "gadong"}}\fR  of \fI{header, "My-X-Header: gadong"}\fR
-
+\fI{header, {"My-X-Header", "gadong"}}\fR or \fI{header, "My-X-Header: gadong"}\fR
 
 .TP
-\fB{allheaders, HeaderList}\fB
+\fB{header, {HeaderName, erase}}\fR
+Clears the header named \fIHeaderName\fR from the accumulated headers.
+
+.TP
+\fB{allheaders, HeaderList}\fR
 Will clear all previously accumulated headers and replace them.
 
 

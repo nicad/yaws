@@ -38,6 +38,7 @@
 -export([stream_process_deliver/2, stream_process_deliver_chunk/2,
          stream_process_deliver_final_chunk/2, stream_process_end/2]).
 -export([websocket_send/2]).
+-export([get_sslsocket/1]).
 -export([new_cookie_session/1, new_cookie_session/2, new_cookie_session/3,
          cookieval_to_opaque/1, request_url/1,
          print_cookie_sessions/0,
@@ -63,69 +64,34 @@
 -export([ehtml_expand/1, ehtml_expander/1, ehtml_apply/2,
          ehtml_expander_test/0]).
 
--export([parse_set_cookie/1, format_set_cookie/1,
-         postvar/2, queryvar/2, getvar/2]).
+-export([parse_set_cookie/1, parse_cookie/1, format_set_cookie/1,
+         format_cookie/1, postvar/2, queryvar/2, getvar/2]).
 
 -export([binding/1,binding_exists/1,
          dir_listing/1, dir_listing/2, redirect_self/1]).
 
--export([arg_clisock/1
-         , arg_client_ip_port/1
-         , arg_headers/1
-         , arg_req/1
-         , arg_clidata/1
-         , arg_server_path/1
-         , arg_querydata/1
-         , arg_appmoddata/1
-         , arg_docroot/1
-         , arg_docroot_mount/1
-         , arg_fullpath/1
-         , arg_cont/1
-         , arg_state/1
-         , arg_pid/1
-         , arg_opaque/1
-         , arg_appmod_prepath/1
-         , arg_prepath/1
-         , arg_pathinfo/1
+-export([arg_clisock/1, arg_client_ip_port/1, arg_headers/1, arg_req/1,
+         arg_clidata/1, arg_server_path/1, arg_querydata/1, arg_appmoddata/1,
+         arg_docroot/1, arg_docroot_mount/1, arg_fullpath/1, arg_cont/1,
+         arg_state/1, arg_pid/1, arg_opaque/1, arg_appmod_prepath/1, arg_prepath/1,
+         arg_pathinfo/1]).
+-export([http_request_method/1, http_request_path/1, http_request_version/1,
+         http_response_version/1, http_response_status/1, http_response_phrase/1,
+         headers_connection/1, headers_accept/1, headers_host/1,
+         headers_if_modified_since/1, headers_if_match/1, headers_if_none_match/1,
+         headers_if_range/1, headers_if_unmodified_since/1, headers_range/1,
+         headers_referer/1, headers_user_agent/1, headers_accept_ranges/1,
+         headers_cookie/1, headers_keep_alive/1, headers_location/1,
+         headers_content_length/1, headers_content_type/1,
+         headers_content_encoding/1, headers_authorization/1,
+         headers_transfer_encoding/1, headers_x_forwarded_for/1, headers_other/1]).
 
-         , http_request_method/1
-         , http_request_path/1
-         , http_request_version/1
-
-         , http_response_version/1
-         , http_response_status/1
-         , http_response_phrase/1
-
-         , headers_connection/1
-         , headers_accept/1
-         , headers_host/1
-         , headers_if_modified_since/1
-         , headers_if_match/1
-         , headers_if_none_match/1
-         , headers_if_range/1
-         , headers_if_unmodified_since/1
-         , headers_range/1
-         , headers_referer/1
-         , headers_user_agent/1
-         , headers_accept_ranges/1
-         , headers_cookie/1
-         , headers_keep_alive/1
-         , headers_location/1
-         , headers_content_length/1
-         , headers_content_type/1
-         , headers_content_encoding/1
-         , headers_authorization/1
-         , headers_transfer_encoding/1
-         , headers_x_forwarded_for/1
-         , headers_other/1
-
-        ]).
-
+-export([set_header/2, set_header/3, get_header/2, get_header/3, delete_header/2]).
 
 -import(lists, [flatten/1, reverse/1]).
 
-%% these are a bunch of function that are useful inside
-%% yaws scripts
+%% These are a bunch of accessor functions that are useful inside
+%% yaws scripts.
 
 arg_clisock(#arg{clisock = X}) -> X.
 arg_client_ip_port(#arg{client_ip_port = X}) -> X.
@@ -740,56 +706,22 @@ setcookie(Name, Value, Path, Expire, Domain, Secure) ->
 %%        Str if found
 %% if several cookies with the same name are passed fron the browser,
 %% only the first match is returned
+find_cookie_val(Name, #arg{}=A) ->
+    find_cookie_val(Name, (A#arg.headers)#headers.cookie);
+find_cookie_val(Name, Cookies) ->
+    find_cookie_val2(yaws:to_lower(Name), Cookies).
 
-find_cookie_val(Cookie, A) when is_record(A, arg) ->
-    find_cookie_val(Cookie,  (A#arg.headers)#headers.cookie);
-%%
-find_cookie_val(_Cookie, []) ->
+find_cookie_val2(_, []) ->
     [];
-find_cookie_val(Cookie, [FullCookie | FullCookieList]) ->
-    case eat_cookie(Cookie, FullCookie) of
-        [] ->
-            find_cookie_val(Cookie, FullCookieList);
-        Val ->
-            Val
+find_cookie_val2(Name, [Cookie|Rest]) ->
+    L = parse_cookie(Cookie),
+    case lists:keyfind(Name, #cookie.key, L) of
+        #cookie{value=undefined} -> [];
+        #cookie{value=Value}     -> Value;
+        false                    -> find_cookie_val2(Name, Rest)
     end.
 
-%% Remove leading spaces before eating.
-eat_cookie([], _)           -> [];
-eat_cookie([$\s|T], Str)    -> eat_cookie(T, Str);
-eat_cookie(_, [])           -> [];
-eat_cookie(Cookie, [$\s|T]) -> eat_cookie(Cookie, T);
-eat_cookie(Cookie, Str) when is_list(Cookie),is_list(Str) ->
-    try
-        eat_cookie2(Cookie++"=", Str, Cookie)
-    catch
-        _:_ -> []
-    end.
-
-%% Look for the Cookie and extract its value.
-eat_cookie2(_, [], _)    ->
-    throw("not found");
-eat_cookie2([H1|T], [H2|R], C) ->
-    case string:to_lower(H1) =:= string:to_lower(H2) of
-        true ->
-            eat_cookie2(T, R, C);
-        false ->
-            {_,Rest} = eat_until(R, $;),
-            eat_cookie(C, Rest)
-    end;
-eat_cookie2([], L, _) ->
-    {Meat,_} = eat_until(L, $;),
-    Meat.
-
-eat_until(L, U) ->
-    eat_until(L, U, []).
-
-eat_until([H|T], H, Acc)              -> {lists:reverse(Acc), T};
-eat_until([H|T], U, Acc) when H =/= U -> eat_until(T, U, [H|Acc]);
-eat_until([], _, Acc)                 -> {lists:reverse(Acc), []}.
-
-
-
+%%
 url_decode([$%, Hi, Lo | Tail]) ->
             Hex = yaws:hex_to_integer([Hi, Lo]),
             [Hex | url_decode(Tail)];
@@ -956,8 +888,8 @@ stream_chunk_deliver_blocking(YawsPid, Data) ->
 stream_chunk_end(YawsPid) ->
     YawsPid ! endofstreamcontent.
 
-stream_process_deliver(Sock={sslsocket,_,_}, IoList) ->
-    ssl:send(Sock, IoList);
+stream_process_deliver({ssl, SslSock}, IoList) ->
+    ssl:send(SslSock, IoList);
 stream_process_deliver(Sock, IoList) ->
     gen_tcp:send(Sock, IoList).
 
@@ -981,8 +913,8 @@ stream_process_deliver_final_chunk(Sock, IoList) ->
 
 stream_process_end(closed, YawsPid) ->
     YawsPid ! {endofstreamcontent, closed};
-stream_process_end(Sock={sslsocket,_,_}, YawsPid) ->
-    ssl:controlling_process(Sock, YawsPid),
+stream_process_end({ssl, SslSock}, YawsPid) ->
+    ssl:controlling_process(SslSock, YawsPid),
     YawsPid ! endofstreamcontent;
 stream_process_end(Sock, YawsPid) ->
     gen_tcp:controlling_process(Sock, YawsPid),
@@ -993,6 +925,11 @@ stream_process_end(Sock, YawsPid) ->
 websocket_send(Pid, {Type, Data}) ->
     yaws_websockets:send(Pid, {Type, Data}).
 
+%% returns {ok, SSL socket} if an SSL socket, undefined otherwise
+get_sslsocket({ssl, SslSocket}) ->
+    {ok, SslSocket};
+get_sslsocket(_Socket) ->
+    undefined.
 
 %% Return new cookie string
 new_cookie_session(Opaque) ->
@@ -1178,6 +1115,293 @@ reformat_header(H) ->
           end, H#headers.other).
 
 
+set_header(#headers{}=Hdrs, {Header, Value}) ->
+    set_header(Hdrs, Header, Value).
+
+set_header(#headers{}=Hdrs, connection, Value) ->
+    Hdrs#headers{connection = Value};
+set_header(#headers{}=Hdrs, {lower, "connection"}, Value) ->
+    Hdrs#headers{connection = Value};
+set_header(#headers{}=Hdrs, accept, Value) ->
+    Hdrs#headers{accept = Value};
+set_header(#headers{}=Hdrs, {lower, "accept"}, Value) ->
+    Hdrs#headers{accept = Value};
+set_header(#headers{}=Hdrs, host, Value) ->
+    Hdrs#headers{host = Value};
+set_header(#headers{}=Hdrs, {lower, "host"}, Value) ->
+    Hdrs#headers{host = Value};
+set_header(#headers{}=Hdrs, if_modified_since, Value) ->
+    Hdrs#headers{if_modified_since = Value};
+set_header(#headers{}=Hdrs, {lower, "if-modified-since"}, Value) ->
+    Hdrs#headers{if_modified_since = Value};
+set_header(#headers{}=Hdrs, if_match, Value) ->
+    Hdrs#headers{if_match = Value};
+set_header(#headers{}=Hdrs, {lower, "if-match"}, Value) ->
+    Hdrs#headers{if_match = Value};
+set_header(#headers{}=Hdrs, if_none_match, Value) ->
+    Hdrs#headers{if_none_match = Value};
+set_header(#headers{}=Hdrs, {lower, "if-none-match"}, Value) ->
+    Hdrs#headers{if_none_match = Value};
+set_header(#headers{}=Hdrs, if_range, Value) ->
+    Hdrs#headers{if_range = Value};
+set_header(#headers{}=Hdrs, {lower, "if-range"}, Value) ->
+    Hdrs#headers{if_range = Value};
+set_header(#headers{}=Hdrs, if_unmodified_since, Value) ->
+    Hdrs#headers{if_unmodified_since = Value};
+set_header(#headers{}=Hdrs, {lower, "if-unmodified-since"}, Value) ->
+    Hdrs#headers{if_unmodified_since = Value};
+set_header(#headers{}=Hdrs, range, Value) ->
+    Hdrs#headers{range = Value};
+set_header(#headers{}=Hdrs, {lower, "range"}, Value) ->
+    Hdrs#headers{range = Value};
+set_header(#headers{}=Hdrs, referer, Value) ->
+    Hdrs#headers{referer = Value};
+set_header(#headers{}=Hdrs, {lower, "referer"}, Value) ->
+    Hdrs#headers{referer = Value};
+set_header(#headers{}=Hdrs, user_agent, Value) ->
+    Hdrs#headers{user_agent = Value};
+set_header(#headers{}=Hdrs, {lower, "user-agent"}, Value) ->
+    Hdrs#headers{user_agent = Value};
+set_header(#headers{}=Hdrs, accept_ranges, Value) ->
+    Hdrs#headers{accept_ranges = Value};
+set_header(#headers{}=Hdrs, {lower, "accept-ranges"}, Value) ->
+    Hdrs#headers{accept_ranges = Value};
+set_header(#headers{}=Hdrs, cookie, Value) ->
+    Hdrs#headers{cookie = Value};
+set_header(#headers{}=Hdrs, {lower, "cookie"}, Value) ->
+    Hdrs#headers{cookie = Value};
+set_header(#headers{}=Hdrs, keep_alive, Value) ->
+    Hdrs#headers{keep_alive = Value};
+set_header(#headers{}=Hdrs, {lower, "keep-alive"}, Value) ->
+    Hdrs#headers{keep_alive = Value};
+set_header(#headers{}=Hdrs, location, Value) ->
+    Hdrs#headers{location = Value};
+set_header(#headers{}=Hdrs, {lower, "location"}, Value) ->
+    Hdrs#headers{location = Value};
+set_header(#headers{}=Hdrs, content_length, Value) ->
+    Hdrs#headers{content_length = Value};
+set_header(#headers{}=Hdrs, {lower, "content-length"}, Value) ->
+    Hdrs#headers{content_length = Value};
+set_header(#headers{}=Hdrs, content_type, Value) ->
+    Hdrs#headers{content_type = Value};
+set_header(#headers{}=Hdrs, {lower, "content-type"}, Value) ->
+    Hdrs#headers{content_type = Value};
+set_header(#headers{}=Hdrs, content_encoding, Value) ->
+    Hdrs#headers{content_encoding = Value};
+set_header(#headers{}=Hdrs, {lower, "content-encoding"}, Value) ->
+    Hdrs#headers{content_encoding = Value};
+set_header(#headers{}=Hdrs, authorization, Value) ->
+    Hdrs#headers{authorization = Value};
+set_header(#headers{}=Hdrs, {lower, "authorization"}, Value) ->
+    Hdrs#headers{authorization = Value};
+set_header(#headers{}=Hdrs, transfer_encoding, Value) ->
+    Hdrs#headers{transfer_encoding = Value};
+set_header(#headers{}=Hdrs, {lower, "transfer-encoding"}, Value) ->
+    Hdrs#headers{transfer_encoding = Value};
+set_header(#headers{}=Hdrs, x_forwarded_for, Value) ->
+    Hdrs#headers{x_forwarded_for = Value};
+set_header(#headers{}=Hdrs, {lower, "x-forwarded-for"}, Value) ->
+    Hdrs#headers{x_forwarded_for = Value};
+set_header(#headers{}=Hdrs, Header, Value) when is_atom(Header) ->
+    set_header(Hdrs, atom_to_list(Header), Value);
+set_header(#headers{}=Hdrs, Header, Value) when is_binary(Header) ->
+    set_header(Hdrs, binary_to_list(Header), Value);
+set_header(#headers{}=Hdrs, Header, Val) when is_binary(Val) ->
+    set_header(Hdrs, {lower, string:to_lower(Header)}, binary_to_list(Val));
+set_header(#headers{other=Other}=Hdrs, {lower, Header}, undefined) ->
+    Handler = fun(_, true, Acc) ->
+                      Acc;
+                 (HdrVal, false, Acc) ->
+                      [HdrVal|Acc]
+              end,
+    NewOther = fold_others(Header, Handler, Other, []),
+    Hdrs#headers{other = lists:reverse(NewOther)};
+set_header(#headers{other=Other}=Hdrs, {lower, Header}, Val) ->
+    HdrName = erlang_header_name(Header),
+    Handler = fun({http_header, Int, _, Rsv, _}, true, {Acc, _}) ->
+                      {[{http_header, Int, HdrName, Rsv, Val}|Acc],true};
+                 (HdrVal, false, {Acc, Found}) ->
+                      {[HdrVal|Acc], Found}
+              end,
+    {NewOther0, Found} = fold_others(Header, Handler, Other, {[], false}),
+    NewOther = case Found of
+                   true ->
+                       NewOther0;
+                   false ->
+                       [{http_header, 0, HdrName, undefined, Val}|NewOther0]
+               end,
+    Hdrs#headers{other = lists:reverse(NewOther)};
+set_header(#headers{}=Hdrs, Header, undefined) ->
+    set_header(Hdrs, {lower, string:to_lower(Header)}, undefined);
+set_header(#headers{}=Hdrs, Header, Value) ->
+    set_header(Hdrs, {lower, string:to_lower(Header)}, Value).
+
+get_header(#headers{}=Hdrs, connection) ->
+    Hdrs#headers.connection;
+get_header(#headers{}=Hdrs, {lower, "connection"}) ->
+    Hdrs#headers.connection;
+get_header(#headers{}=Hdrs, accept) ->
+    Hdrs#headers.accept;
+get_header(#headers{}=Hdrs, {lower, "accept"}) ->
+    Hdrs#headers.accept;
+get_header(#headers{}=Hdrs, host) ->
+    Hdrs#headers.host;
+get_header(#headers{}=Hdrs, {lower, "host"}) ->
+    Hdrs#headers.host;
+get_header(#headers{}=Hdrs, if_modified_since) ->
+    Hdrs#headers.if_modified_since;
+get_header(#headers{}=Hdrs, {lower, "if-modified-since"}) ->
+    Hdrs#headers.if_modified_since;
+get_header(#headers{}=Hdrs, if_match) ->
+    Hdrs#headers.if_match;
+get_header(#headers{}=Hdrs, {lower, "if-match"}) ->
+    Hdrs#headers.if_match;
+get_header(#headers{}=Hdrs, if_none_match) ->
+    Hdrs#headers.if_none_match;
+get_header(#headers{}=Hdrs, {lower, "if-none-match"}) ->
+    Hdrs#headers.if_none_match;
+get_header(#headers{}=Hdrs, if_range) ->
+    Hdrs#headers.if_range;
+get_header(#headers{}=Hdrs, {lower, "if-range"}) ->
+    Hdrs#headers.if_range;
+get_header(#headers{}=Hdrs, if_unmodified_since) ->
+    Hdrs#headers.if_unmodified_since;
+get_header(#headers{}=Hdrs, {lower, "if-unmodified-since"}) ->
+    Hdrs#headers.if_unmodified_since;
+get_header(#headers{}=Hdrs, range) ->
+    Hdrs#headers.range;
+get_header(#headers{}=Hdrs, {lower, "range"}) ->
+    Hdrs#headers.range;
+get_header(#headers{}=Hdrs, referer) ->
+    Hdrs#headers.referer;
+get_header(#headers{}=Hdrs, {lower, "referer"}) ->
+    Hdrs#headers.referer;
+get_header(#headers{}=Hdrs, user_agent) ->
+    Hdrs#headers.user_agent;
+get_header(#headers{}=Hdrs, {lower, "user-agent"}) ->
+    Hdrs#headers.user_agent;
+get_header(#headers{}=Hdrs, accept_ranges) ->
+    Hdrs#headers.accept_ranges;
+get_header(#headers{}=Hdrs, {lower, "accept-ranges"}) ->
+    Hdrs#headers.accept_ranges;
+get_header(#headers{}=Hdrs, cookie) ->
+    Hdrs#headers.cookie;
+get_header(#headers{}=Hdrs, {lower, "cookie"}) ->
+    Hdrs#headers.cookie;
+get_header(#headers{}=Hdrs, keep_alive) ->
+    Hdrs#headers.keep_alive;
+get_header(#headers{}=Hdrs, {lower, "keep-alive"}) ->
+    Hdrs#headers.keep_alive;
+get_header(#headers{}=Hdrs, location) ->
+    Hdrs#headers.location;
+get_header(#headers{}=Hdrs, {lower, "location"}) ->
+    Hdrs#headers.location;
+get_header(#headers{}=Hdrs, content_length) ->
+    Hdrs#headers.content_length;
+get_header(#headers{}=Hdrs, {lower, "content-length"}) ->
+    Hdrs#headers.content_length;
+get_header(#headers{}=Hdrs, content_type) ->
+    Hdrs#headers.content_type;
+get_header(#headers{}=Hdrs, {lower, "content-type"}) ->
+    Hdrs#headers.content_type;
+get_header(#headers{}=Hdrs, content_encoding) ->
+    Hdrs#headers.content_encoding;
+get_header(#headers{}=Hdrs, {lower, "content-encoding"}) ->
+    Hdrs#headers.content_encoding;
+get_header(#headers{}=Hdrs, authorization) ->
+    Hdrs#headers.authorization;
+get_header(#headers{}=Hdrs, {lower, "authorization"}) ->
+    Hdrs#headers.authorization;
+get_header(#headers{}=Hdrs, transfer_encoding) ->
+    Hdrs#headers.transfer_encoding;
+get_header(#headers{}=Hdrs, {lower, "transfer-encoding"}) ->
+    Hdrs#headers.transfer_encoding;
+get_header(#headers{}=Hdrs, x_forwarded_for) ->
+    Hdrs#headers.x_forwarded_for;
+get_header(#headers{}=Hdrs, {lower, "x-forwarded-for"}) ->
+    Hdrs#headers.x_forwarded_for;
+get_header(#headers{}=Hdrs, Header) when is_atom(Header) ->
+    get_header(Hdrs, atom_to_list(Header));
+get_header(#headers{}=Hdrs, Header) when is_binary(Header) ->
+    get_header(Hdrs, binary_to_list(Header));
+get_header(#headers{other = Other}, {lower, Header}) ->
+    Handler = fun({http_header, _, _, _, Value}, true, _Acc) ->
+                      throw(Value);
+                 (_, false, Acc) ->
+                      Acc
+              end,
+    catch fold_others(Header, Handler, Other, undefined);
+get_header(#headers{}=Hdrs, Header) ->
+    get_header(Hdrs, {lower, string:to_lower(Header)}).
+
+get_header(#headers{}=Hdrs, Header, Default) ->
+    case get_header(Hdrs, Header) of
+        undefined ->
+            Default;
+        Value ->
+            Value
+    end.
+
+delete_header(#headers{}=Hdrs, Header) ->
+    set_header(Hdrs, Header, undefined).
+
+%% assumes that LowerHdr is already downcased
+fold_others(LowerHdr, Handler, Other, StartAcc) ->
+    lists:foldl(fun({http_header, _, Hdr, _, _}=HdrVal, Acc) ->
+                        HdrNm = string:to_lower(
+                                  if
+                                      is_atom(Hdr) -> atom_to_list(Hdr);
+                                      is_binary(Hdr) -> binary_to_list(Hdr);
+                                      true -> Hdr
+                                  end),
+                        Handler(HdrVal, HdrNm == LowerHdr, Acc)
+                end, StartAcc, Other).
+
+erlang_header_name("cache-control")       -> 'Cache-Control';
+erlang_header_name("date")                -> 'Date';
+erlang_header_name("pragma")              -> 'Pragma';
+erlang_header_name("upgrade")             -> 'Upgrade';
+erlang_header_name("via")                 -> 'Via';
+erlang_header_name("accept-charset")      -> 'Accept-Charset';
+erlang_header_name("accept-encoding")     -> 'Accept-Encoding';
+erlang_header_name("accept-language")     -> 'Accept-Language';
+erlang_header_name("from")                -> 'From';
+erlang_header_name("max-forwards")        -> 'Max-Forwards';
+erlang_header_name("proxy-authorization") -> 'Proxy-Authorization';
+erlang_header_name("age")                 -> 'Age';
+erlang_header_name("proxy-authenticate")  -> 'Proxy-Authenticate';
+erlang_header_name("public")              -> 'Public';
+erlang_header_name("retry-after")         -> 'Retry-After';
+erlang_header_name("server")              -> 'Server';
+erlang_header_name("vary")                -> 'Vary';
+erlang_header_name("warning")             -> 'Warning';
+erlang_header_name("www-authenticate")    -> 'Www-Authenticate';
+erlang_header_name("allow")               -> 'Allow';
+erlang_header_name("content-base")        -> 'Content-Base';
+erlang_header_name("content-encoding")    -> 'Content-Encoding';
+erlang_header_name("content-language")    -> 'Content-Language';
+erlang_header_name("content-location")    -> 'Content-Location';
+erlang_header_name("content-md5")         -> 'Content-Md5';
+erlang_header_name("content-range")       -> 'Content-Range';
+erlang_header_name("etag")                -> 'Etag';
+erlang_header_name("expires")             -> 'Expires';
+erlang_header_name("last-modified")       -> 'Last-Modified';
+erlang_header_name("set-cookie")          -> 'Set-Cookie';
+erlang_header_name("set-cookie2")         -> 'Set-Cookie2';
+erlang_header_name("proxy-connection")    -> 'Proxy-Connection';
+erlang_header_name(Name)                  -> capitalize_header(Name).
+
+capitalize_header(Name) ->
+   capitalize_header2(Name, "").
+
+capitalize_header2([C | Rest], "") when C >= $a andalso C =< $z ->
+   capitalize_header2(Rest, [C - $a + $A]);
+capitalize_header2([$-, C | Rest], Result) when C >= $a andalso C =< $z ->
+   capitalize_header2(Rest, [C - $a + $A, $- | Result]);
+capitalize_header2([C | Rest], Result) ->
+   capitalize_header2(Rest, [C | Result]);
+capitalize_header2([], Result) ->
+   lists:reverse(Result).
 
 
 reformat_request(#http_request{method = bad_request}) ->
@@ -1303,14 +1527,14 @@ format_partial_url(Url, SC) ->
              yaws:to_string(Url#url.scheme) ++ "://"
      end,
      if
-         Url#url.host == undefined ->
+         Url#url.host == undefined orelse Url#url.host == [] ->
              yaws:redirect_host(SC, undefined);
          true ->
              Url#url.host
      end,
      if
          Url#url.port == undefined ->
-             yaws:redirect_port(SC);
+             [];
          true  ->
              [$: | integer_to_list(Url#url.port)]
      end,
@@ -1742,148 +1966,362 @@ deepmember(C,[N|Cs]) when C /= N ->
     deepmember(C, Cs).
 
 
-%%  Parse a Set-Cookie header.
+%%  . Parse a Set-Cookie header, following the RFC6265:
 %%
-%%  RFC (2109) ports are from RFC 2965
+%% "Set-Cookie: " set-cookie-string
+%%    set-cookie-string = cookie-pair *( ";" SP cookie-av )
+%%    cookie-pair       = cookie-name "=" cookie-value
+%%    cookie-name       = token
+%%    cookie-value      = *cookie-octet / ( DQUOTE *cookie-octet DQUOTE )
+%%    cookie-octet      = %x21 / %x23-2B / %x2D-3A / %x3C-5B / %x5D-7E
+%%    token             = <token, defined in [RFC2616], Section 2.2>
 %%
-%%  "Cookie:" cookie-version 1*((";" | ",") cookie-value)
-%%  "Set-Cookie:"  cookies
-%%  "Set-Cookie2:" cookies
-%%  cookie-value    =       NAME "=" VALUE [";" path] [";" domain] [";" port]
-%%  cookie          =       NAME "=" VALUE *( ";" cookie-av )
-%%  cookie-version  =       "$Version" "=" value
-%%  NAME            =       attr
-%%  VALUE           =       value
-%%  path            =       "$Path" "=" value
-%%  domain          =       "$Domain" "=" value
-%%  port            =       "$Port" "=" <"> value <">
+%%    cookie-av         = expires-av / max-age-av / domain-av / path-av /
+%%                        secure-av / httponly-av / extension-av
+%%    expires-av        = "Expires=" <rfc1123-date, defined in [RFC2616]>
+%%    max-age-av        = "Max-Age=" [1-9] *DIGIT
+%%    domain-av         = "Domain=" <subdomain> ; defined in [RFC1034]
+%%    path-av           = "Path=" <any CHAR except CTLs or ";">
+%%    secure-av         = "Secure"
+%%    httponly-av       = "HttpOnly"
+%%    extension-av      = <any CHAR except CTLs or ";">
 %%
-%%  cookie-av       = "Comment" "=" value
-%%                  | "CommentURL" "=" <"> http_URL <">
-%%                  | "Discard"
-%%                  | "Domain" "=" value
-%%                  | "Max-Age" "=" value
-%%                  | "Path" "=" value
-%%                  | "Port" [ "=" <"> portlist <"> ]
-%%                  | "Secure"
-%%                  | "Version" "=" 1*DIGIT
+%% NOTE: in RFC2109 and RFC2965, multiple cookies, separated by comma, can be
+%% defined in a single header. So, To be backward compatible with these RFCs,
+%% comma is forbidden in 'path-av' and 'extension-av' except for double-quoted
+%% value.
 %%
-
+%%
+%%  . Parse a Cookie header, following the RFC6265:
+%%
+%% "Cookie: " cookie-string
+%%    cookie-string = cookie-pair *( ";" SP cookie-pair )
+%%
+%% NOTE: To be backward compatible with RFCs, comma is considered as a cookie
+%% separator, like semicolon.
+%%
 parse_set_cookie(Str) ->
-    parse_set_cookie(Str, #setcookie{}).
+    parse_set_cookie(Str, []).
 
-parse_set_cookie([], Cookie) ->
-    Cookie;
-parse_set_cookie(Str, Cookie) ->
-    Rest00 = skip_space(Str),
-    {Key,Rest0} = parse_set_cookie_key(Rest00, []),
-    Rest1 = skip_space(Rest0),
-    case Rest1 of
-        [$=|Rest2] ->
-            {Value,Quoted,Rest3} = parse_set_cookie_value(Rest2),
-            NewC=add_set_cookie(Cookie,yaws:to_lower(Key),Value,Quoted),
-            parse_set_cookie(Rest3,NewC);
-        [$;|Rest2] ->
-            NewC =add_set_cookie(Cookie,yaws:to_lower(Key),undefined,false),
-            parse_set_cookie(Rest2,NewC);
-        _ ->
-            Cookie
+parse_set_cookie([], [SetCookie]) ->
+    SetCookie;
+parse_set_cookie([], SetCookies) ->
+    lists:reverse(SetCookies);
+parse_set_cookie(Str, SetCookies) ->
+    case do_parse_set_cookie(Str) of
+        {#setcookie{extensions=Exts}=C0, Rest} ->
+            C1 = C0#setcookie{extensions=lists:reverse(Exts)},
+            parse_set_cookie(Rest, [C1|SetCookies]);
+        error ->
+            []
     end.
 
-%%
 
-parse_set_cookie_key([], Acc) ->
-    {lists:reverse(Acc), []};
-parse_set_cookie_key(T=[$=|_], Acc) ->
-    {lists:reverse(Acc), T};
-parse_set_cookie_key(T=[$;|_], Acc) ->
-    {lists:reverse(Acc), T};
-parse_set_cookie_key([C|T], Acc) ->
-    parse_set_cookie_key(T, [C|Acc]).
+do_parse_set_cookie(Str) ->
+    {Key, Rest0} = parse_cookie_key(skip_space(Str), []),
+    case yaws:to_lower(Key) of
+        [] ->
+            error;
+        K ->
+            Cookie0 = #setcookie{key=K, quoted=false},
+            case skip_space(Rest0) of
+                [$=|Rest1] ->
+                    {V, Q, Rest2} = parse_cookie_value(skip_space(Rest1)),
+                    Cookie1 = Cookie0#setcookie{value=V, quoted=Q},
+                    parse_set_cookie_result(Cookie1, skip_space(Rest2));
+                [$;|Rest1] -> parse_set_cookie_options(Rest1, Cookie0);
+                [$,|Rest1] -> {Cookie0, Rest1};
+                []         -> {Cookie0, []};
+                _          -> error
+            end
+    end.
 
-%%
+parse_set_cookie_options(Str, Cookie0) ->
+    {Key, Rest0} = parse_cookie_key(skip_space(Str), []),
+    case yaws:to_lower(Key) of
+        [] ->
+            {Cookie0, Rest0};
+        "domain" ->
+            case skip_space(Rest0) of
+                [$=|Rest1] ->
+                    {V,_,Rest2} = parse_set_cookie_domain(skip_space(Rest1),[]),
+                    Cookie1 = Cookie0#setcookie{domain=V},
+                    parse_set_cookie_result(Cookie1, skip_space(Rest2));
+                [$;|Rest1] -> parse_set_cookie_options(Rest1, Cookie0);
+                [$,|Rest1] -> {Cookie0, Rest1};
+                []         -> {Cookie0, []};
+                _          -> error
+            end;
+        "max-age" ->
+            case skip_space(Rest0) of
+                [$=|Rest1] ->
+                    {V,_,Rest2} = parse_set_cookie_maxage(skip_space(Rest1),[]),
+                    Cookie1 = Cookie0#setcookie{max_age=V},
+                    parse_set_cookie_result(Cookie1, skip_space(Rest2));
+                [$;|Rest1] -> parse_set_cookie_options(Rest1, Cookie0);
+                [$,|Rest1] -> {Cookie0, Rest1};
+                []         -> {Cookie0, []};
+                _          -> error
+            end;
+        "expires" ->
+            case skip_space(Rest0) of
+                [$=|Rest1] ->
+                    {V, _, Rest2} = parse_set_cookie_expires(skip_space(Rest1)),
+                    Cookie1 = Cookie0#setcookie{expires=V},
+                    parse_set_cookie_result(Cookie1, skip_space(Rest2));
+                [$;|Rest1] -> parse_set_cookie_options(Rest1, Cookie0);
+                [$,|Rest1] -> {Cookie0, Rest1};
+                []         -> {Cookie0, []};
+                _          -> error
+            end;
+        "path" ->
+            case skip_space(Rest0) of
+                [$=|Rest1] ->
+                    {V, _, Rest2} = parse_cookie_value(skip_space(Rest1)),
+                    Cookie1 = Cookie0#setcookie{path=V},
+                    parse_set_cookie_result(Cookie1, skip_space(Rest2));
+                [$;|Rest1] -> parse_set_cookie_options(Rest1, Cookie0);
+                [$,|Rest1] -> {Cookie0, Rest1};
+                []         -> {Cookie0, []};
+                _          -> error
+            end;
+        "secure" ->
+            Cookie1 = Cookie0#setcookie{secure=true},
+            parse_set_cookie_result(Cookie1, skip_space(Rest0));
+        "httponly" ->
+            Cookie1 = Cookie0#setcookie{http_only=true},
+            parse_set_cookie_result(Cookie1, skip_space(Rest0));
+        K ->
+            Exts = Cookie0#setcookie.extensions,
+            case skip_space(Rest0) of
+                [$=|Rest1] ->
+                    {V, Q, Rest2} = parse_cookie_value(skip_space(Rest1)),
+                    Cookie1 = Cookie0#setcookie{extensions=[{K,V,Q}|Exts]},
+                    parse_set_cookie_result(Cookie1, skip_space(Rest2));
+                [$;|Rest1] ->
+                    Cookie1 = Cookie0#setcookie{
+                                extensions=[{K,undefined,false}|Exts]
+                               },
+                    parse_set_cookie_options(Rest1, Cookie1);
+                [$,|Rest1] ->
+                    Cookie1 = Cookie0#setcookie{
+                                extensions=[{K,undefined,false}|Exts]
+                               },
+                    {Cookie1, Rest1};
+                [] ->
+                    Cookie1 = Cookie0#setcookie{
+                                extensions=[{K,undefined,false}|Exts]
+                               },
+                    {Cookie1, []};
+                _ ->
+                    error
+            end
+    end.
 
-parse_set_cookie_value([$"|T]) ->
-    parse_quoted(T,[]);
-parse_set_cookie_value(T) ->
-    parse_set_cookie_value(T,[]).
 
-parse_set_cookie_value([],Acc) ->
+parse_set_cookie_domain([C|_]=Rest, []) when C < $A orelse C > $Z orelse
+                                             C < $a orelse C > $z orelse
+                                             C /= $. ->
+    parse_cookie_value(Rest);
+parse_set_cookie_domain([C|_]=Rest, [_|_]=Acc) when C < $0 orelse C > $9 orelse
+                                                    C < $A orelse C > $Z orelse
+                                                    C < $a orelse C > $z orelse
+                                                    C /= $. orelse C /= $- ->
+    {lists:reverse(Acc), false, Rest};
+parse_set_cookie_domain([], Acc) ->
     {lists:reverse(Acc), false, []};
-parse_set_cookie_value(T=[$;|_], Acc) ->
+parse_set_cookie_domain([C|T], Acc) ->
+    parse_set_cookie_domain(T, [C|Acc]).
+
+
+parse_set_cookie_maxage([C|_]=Rest, []) when C < $1 orelse C > $9 ->
+    parse_cookie_value(Rest);
+parse_set_cookie_maxage([C|_]=Rest, [_|_]=Acc) when C < $0 orelse C > $9 ->
+    {lists:reverse(Acc), false, Rest};
+parse_set_cookie_maxage([], Acc) ->
+    {lists:reverse(Acc), false, []};
+parse_set_cookie_maxage([C|T], Acc) ->
+    parse_set_cookie_maxage(T, [C|Acc]).
+
+
+%% First of all, try to parse valid rfc1123 date (faster), then use a regex
+%% (more permissive)
+parse_set_cookie_expires([D,A,Y,$,,$\s,D1,D2,SEP,M,O,N,SEP,Y1,Y2,Y3,Y4,$\s,
+                          H1,H2,$:,M1,M2,$:,S1,S2,$\s,Z1,Z2,Z3|Rest])
+  when SEP =:= $- orelse SEP =:= $\s ->
+    {[D,A,Y,$,,$\s,D1,D2,SEP,M,O,N,SEP,Y1,Y2,Y3,Y4,$\s,
+      H1,H2,$:,M1,M2,$:,S1,S2,$\s,Z1,Z2,Z3], false, Rest};
+parse_set_cookie_expires(Str) ->
+    RE = "^("
+        "(?:[a-zA-Z]+,\s+)?"                    %% Week day
+        "[0-9]+(?:\s|-)[a-zA-Z]+(?:\s|-)[0-9]+" %% DD Month YYYY
+        "\s+[0-9]+:[0-9]+:[0-9]+"               %% hh:mm:ss
+        "(?:\s+[a-zA-Z]+)?"                     %% timezone
+        ")"
+        "(.*)$",
+    case re:run(Str, RE, [{capture, all_but_first, list}, caseless]) of
+        {match, [Date, Rest]} -> {Date, false, Rest};
+        nomatch               -> parse_cookie_value(Str)
+    end.
+
+
+parse_set_cookie_result(Cookie, [$;|Rest]) ->
+    parse_set_cookie_options(Rest, Cookie);
+parse_set_cookie_result(Cookie, [$,|Rest]) ->
+    {Cookie, Rest};
+parse_set_cookie_result(Cookie, []) ->
+    {Cookie, []};
+parse_set_cookie_result(_, _) ->
+    error.
+
+
+%%
+parse_cookie(Str) ->
+    parse_cookie(Str, []).
+
+parse_cookie([], Cookies) ->
+    lists:reverse(Cookies);
+parse_cookie(Str, Cookies) ->
+    {Key, Rest0} = parse_cookie_key(skip_space(Str), []),
+    case yaws:to_lower(Key) of
+        [] ->
+            [];
+        K ->
+            case skip_space(Rest0) of
+                [$=|Rest1] ->
+                    {V, Q, Rest2} = parse_cookie_value(skip_space(Rest1)),
+                    C = #cookie{key=K, value=V, quoted=Q},
+                    case skip_space(Rest2) of
+                        [$;|Rest3] -> parse_cookie(Rest3, [C|Cookies]);
+                        [$,|Rest3] -> parse_cookie(Rest3, [C|Cookies]);
+                        []         -> parse_cookie([], [C|Cookies]);
+                        _          -> []
+                    end;
+                [$;|Rest1] -> parse_cookie(Rest1, [#cookie{key=K}|Cookies]);
+                [$,|Rest1] -> parse_cookie(Rest1, [#cookie{key=K}|Cookies]);
+                []         -> parse_cookie([], [#cookie{key=K}|Cookies]);
+                _          -> []
+            end
+    end.
+
+
+%%
+%% All CHAR except ('=' | ';' | ',' | SP | HT | CRLF | LF)
+parse_cookie_key([], Acc) ->
+    {lists:reverse(Acc), []};
+parse_cookie_key(T=[$=|_], Acc) ->
+    {lists:reverse(Acc), T};
+parse_cookie_key(T=[$;|_], Acc) ->
+    {lists:reverse(Acc), T};
+parse_cookie_key(T=[$,|_], Acc) ->
+    {lists:reverse(Acc), T};
+parse_cookie_key(T=[$\s|_], Acc) ->
+    {lists:reverse(Acc), T};
+parse_cookie_key(T=[$\t|_], Acc) ->
+    {lists:reverse(Acc), T};
+parse_cookie_key(T=[$\r,$\n|_], Acc) ->
+    {lists:reverse(Acc), T};
+parse_cookie_key(T=[$\n|_], Acc) ->
+    {lists:reverse(Acc), T};
+parse_cookie_key([C|T], Acc) ->
+    parse_cookie_key(T, [C|Acc]).
+
+
+%%
+parse_cookie_value([$"|T]) ->
+    parse_cookie_quoted(T,[]);
+parse_cookie_value(T) ->
+    parse_cookie_value(T,[]).
+
+%% All CHAR except (';' | ',' | SP | HT | CRLF | LF)
+parse_cookie_value([],Acc) ->
+    {lists:reverse(Acc), false, []};
+parse_cookie_value(T=[$;|_], Acc) ->
     {lists:reverse(Acc), false, T};
-parse_set_cookie_value([C|T], Acc) ->
-    parse_set_cookie_value(T, [C|Acc]).
+parse_cookie_value(T=[$,|_], Acc) ->
+    {lists:reverse(Acc), false, T};
+parse_cookie_value(T=[$\s|_], Acc) ->
+    {lists:reverse(Acc), false, T};
+parse_cookie_value(T=[$\t|_], Acc) ->
+    {lists:reverse(Acc), false, T};
+parse_cookie_value(T=[$\r,$\n|_], Acc) ->
+    {lists:reverse(Acc), false, T};
+parse_cookie_value(T=[$\n|_], Acc) ->
+    {lists:reverse(Acc), false, T};
+parse_cookie_value([C|T], Acc) ->
+    parse_cookie_value(T, [C|Acc]).
 
-parse_quoted([], Acc) ->
+
+%% All CHAR except ('"' | CTLs) but including LWS and escape DQUOTEs
+%%   CTL = any US-ASCII control character (octets 0 - 31) and DEL (127)
+%%   LWS = [CRLF] 1*( SP | HT )
+parse_cookie_quoted([], Acc) ->
     {lists:reverse(Acc), true, []};
-parse_quoted([$"|T], Acc) ->
+parse_cookie_quoted([$"|T], Acc) ->
     {lists:reverse(Acc), true, T};
-parse_quoted([$\\,C|T], Acc) ->
-    parse_quoted(T,[C,$\\|Acc]);
-parse_quoted([C|T], Acc) ->
-    parse_quoted(T,[C|Acc]).
-%%
+parse_cookie_quoted([$\\,C|T], Acc) ->
+    parse_cookie_quoted(T,[C,$\\|Acc]);
+parse_cookie_quoted([$\t|T], Acc) ->
+    parse_cookie_quoted(T,[$\t|Acc]);
+parse_cookie_quoted([$\r,$\n,$\s|T], Acc) ->
+    parse_cookie_quoted(T,[$\s,$\n,$\r|Acc]);
+parse_cookie_quoted([$\r,$\n,$\t|T], Acc) ->
+    parse_cookie_quoted(T,[$\t,$\n,$\r|Acc]);
+parse_cookie_quoted([C|T], Acc) when C > 31 andalso C < 127 ->
+    parse_cookie_quoted(T,[C|Acc]);
+parse_cookie_quoted(T, Acc) ->
+    {lists:reverse(Acc), true, T}.
 
-add_set_cookie(C, Key, Value, Quoted) when C#setcookie.key==undefined ->
-    C#setcookie{key=Key,value=Value,quoted=Quoted};
-add_set_cookie(C, "comment", Value, _Quoted) ->
-    C#setcookie{comment=Value};
-add_set_cookie(C, "commenturl", Value, _Quoted) ->
-    C#setcookie{comment_url=Value};
-add_set_cookie(C, "discard", Value, _Quoted) ->
-    C#setcookie{discard=Value};
-add_set_cookie(C, "domain", Value, _Quoted) ->
-    C#setcookie{domain=Value};
-add_set_cookie(C, "max-age", Value, _Quoted) ->
-    C#setcookie{max_age=Value};
-add_set_cookie(C, "path", Value, _Quoted) ->
-    C#setcookie{path=Value};
-add_set_cookie(C, "port", Value, _Quoted) ->
-    C#setcookie{port=Value};
-add_set_cookie(C, "secure", Value, _Quoted) ->
-    C#setcookie{secure=Value};
-add_set_cookie(C, "version", Value, _Quoted) ->
-    C#setcookie{version=Value};
-add_set_cookie(C, _Key, _Value, _Quoted) ->
-    C.
 
 %%
-
 format_set_cookie(C) when C#setcookie.value == undefined ->
-    [C#setcookie.key|format_set_cookie_opts(C)];
+    [C#setcookie.key|format_cookie_opts(C)];
 format_set_cookie(C) when C#setcookie.quoted ->
-    [C#setcookie.key,$=,$",C#setcookie.value,$"|
-     format_set_cookie_opts(C)];
+    [C#setcookie.key,$=,$",C#setcookie.value,$"|format_cookie_opts(C)];
 format_set_cookie(C) ->
-    [C#setcookie.key,$=,C#setcookie.value|
-     format_set_cookie_opts(C)].
-
-add_opt(_Key,undefined) -> [];
-add_opt(Key,Opt) -> [$;,Key,$=,Opt].
-
-format_set_cookie_opts(C) ->
-    [add_opt("Path",C#setcookie.path),
-     add_opt("Port",C#setcookie.port),
-     add_opt("Domain",C#setcookie.domain),
-     add_opt("Secure",C#setcookie.secure),
-     add_opt("Expires",C#setcookie.expires),
-     add_opt("Max-Age",C#setcookie.max_age),
-     add_opt("Discard",C#setcookie.discard),
-     add_opt("Comment",C#setcookie.comment),
-     add_opt("CommentURL",C#setcookie.comment_url),
-     add_opt("version",C#setcookie.version)].
+    [C#setcookie.key,$=,C#setcookie.value|format_cookie_opts(C)].
 
 %%
-
-skip_space([]) -> [];
-skip_space([$ |T]) -> skip_space(T);
-skip_space([$\t|T]) -> skip_space(T);
-skip_space(T) -> T.
+format_cookie([Cookie]) ->
+    format_cookie(Cookie);
+format_cookie([Cookie|Rest]) ->
+    [format_cookie(Cookie),$;,$\s|format_cookie(Rest)];
+format_cookie(#cookie{key=Key, value=undefined}) ->
+    Key;
+format_cookie(#cookie{key=Key, value=Value, quoted=true}) ->
+    [Key,$=,$",Value,$"];
+format_cookie(#cookie{key=Key, value=Value, quoted=false}) ->
+    [Key,$=,Value].
 
 %%
+format_cookie_opts(C=#setcookie{}) ->
+    [
+     add_opt("Domain",   C#setcookie.domain,    false),
+     add_opt("Max-Age",  C#setcookie.max_age,   false),
+     add_opt("Expires",  C#setcookie.expires,   false),
+     add_opt("Path",     C#setcookie.path,      false),
+     add_opt("Secure",   C#setcookie.secure,    false),
+     add_opt("HttpOnly", C#setcookie.http_only, false)
+    ] ++ [add_opt(K,V,Q) || {K,V,Q} <- C#setcookie.extensions].
 
 
+add_opt(_, undefined, _) -> [];
+add_opt(_, false, _)     -> [];
+add_opt(Key, true, _)    -> [$;,$\s,Key];
+add_opt(Key, Opt, true)  -> [$;,$\s,Key,$=,$",Opt,$"];
+add_opt(Key, Opt, false)  -> [$;,$\s,Key,$=,Opt].
+
+
+%%
+skip_space([])          -> [];
+skip_space([$\s|T])     -> skip_space(T);
+skip_space([$\t|T])     -> skip_space(T);
+skip_space([$\r,$\n|T]) -> skip_space(T);
+skip_space([$\n|T])     -> skip_space(T);
+skip_space(T)           -> T.
+
+
+%%
 getvar(ARG,Key) when is_atom(Key) ->
     getvar(ARG, atom_to_list(Key));
 getvar(ARG,Key) ->

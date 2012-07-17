@@ -934,8 +934,8 @@ fload(FD, server, GC, C, Cs, Lno, Chars) ->
         ["deflate", '=', Bool] ->
             case is_bool(Bool) of
                 {true, Val} ->
-                    C2 = ?sc_set_deflate(C#sconf{deflate_options=#deflate{}},
-                                         Val),
+                    C1 = C#sconf{deflate_options=#deflate{}},
+                    C2 = ?sc_set_deflate(C1, Val),
                     fload(FD, server, GC, C2, Cs, Lno+1, Next);
                 false ->
                     {error, ?F("Expect true|false at line ~w", [Lno])}
@@ -1123,18 +1123,43 @@ fload(FD, server, GC, C, Cs, Lno, Chars) ->
                     {error, ?F("Expect true|false at line ~w", [Lno])}
             end;
 
-        ['<', "/server", '>'] when C#sconf.docroot =:= undefined ->
-            {error,
-             ?F("No valid docroot configured for virthost '~s' (port: ~w)",
-                [C#sconf.servername, C#sconf.port])};
         ['<', "/server", '>'] ->
-            case C#sconf.listen of
-                [] ->
-                    C2 = C#sconf{listen = {127,0,0,1}},
-                    fload(FD, globals, GC, undefined, [C2|Cs], Lno+1, Next);
-                Ls ->
-                    Cs2 = [C#sconf{listen=L} || L <- Ls] ++ Cs,
-                    fload(FD, globals, GC, undefined, Cs2, Lno+1, Next)
+            HasDocroot =
+                case C#sconf.docroot of
+                    undefined ->
+                        Tests = [fun() ->
+                                         lists:keymember("/", #proxy_cfg.prefix, C#sconf.revproxy)
+                                 end,
+                                 fun() ->
+                                         lists:keymember("/", 1, C#sconf.redirect_map)
+                                 end,
+                                 fun() ->
+                                         lists:foldl(fun(_, true) -> true;
+                                                        ({"/", _}, _Acc) -> true;
+                                                        (_, Acc) -> Acc
+                                                     end, false, C#sconf.appmods)
+                                 end,
+                                 fun() ->
+                                         ?sc_forward_proxy(C)
+                                 end],
+                        lists:any(fun(T) -> T() end, Tests);
+                    _ ->
+                        true
+                end,
+            case HasDocroot of
+                true ->
+                    case C#sconf.listen of
+                        [] ->
+                            C2 = C#sconf{listen = {127,0,0,1}},
+                            fload(FD, globals, GC, undefined, [C2|Cs], Lno+1, Next);
+                        Ls ->
+                            Cs2 = [C#sconf{listen=L} || L <- Ls] ++ Cs,
+                            fload(FD, globals, GC, undefined, Cs2, Lno+1, Next)
+                    end;
+                false ->
+                    {error,
+                     ?F("No valid docroot configured for virthost '~s' (port: ~w)",
+                        [C#sconf.servername, C#sconf.port])}
             end;
 
         ['<', "opaque", '>'] ->
@@ -1161,21 +1186,26 @@ fload(FD, server, GC, C, Cs, Lno, Chars) ->
                                        Suffixes)},
             fload(FD, server, GC, C2, Cs, Lno+1, Next);
 
-        ["revproxy", '=', Prefix, Url] ->
-            case (catch yaws_api:parse_url(Url)) of
-                {'EXIT', _} ->
-                    {error, ?F("Bad url at line ~p",[Lno])};
-                URL when URL#url.path == "/" ->
-                    P = case lists:reverse(Prefix) of
-                            [$/|_Tail] ->
-                                Prefix;
-                            Other ->
-                                lists:reverse(Other)
-                        end,
-                    C2 = C#sconf{revproxy = [{P, URL} | C#sconf.revproxy]},
+        ["index_files", '=' | Files] ->
+            case parse_index_files(Files) of
+                ok ->
+                    C2 = C#sconf{index_files = Files},
                     fload(FD, server, GC, C2, Cs, Lno+1, Next);
-                _URL ->
-                    {error, "Can't revproxy to an URL with a path "}
+                {error, Str} ->
+                    {error, ?F("~s at line ~w", [Str, Lno])}
+            end;
+
+        ["revproxy", '=' | Tail] ->
+            case parse_revproxy(Tail) of
+                {ok, RevProxy} ->
+                    C2 = C#sconf{revproxy = [RevProxy | C#sconf.revproxy]},
+                    fload(FD, server, GC, C2, Cs, Lno+1, Next);
+                {error, url} ->
+                    {error, ?F("Bad url at line ~p",[Lno])};
+                {error, syntax} ->
+                    {error, ?F("Bad revproxy syntax at line ~p",[Lno])};
+                Error ->
+                    Error
             end;
 
         ["fwdproxy", '=', Bool] ->
@@ -1942,6 +1972,35 @@ parse_appmods([], Ack) ->
     {ok, Ack}.
 
 
+parse_revproxy([Prefix, Url]) ->
+    parse_revproxy_url(Prefix, Url);
+parse_revproxy([Prefix, Url, "intercept_mod", InterceptMod]) ->
+    case parse_revproxy_url(Prefix, Url) of
+        {ok, RP} ->
+            {ok, RP#proxy_cfg{intercept_mod = list_to_atom(InterceptMod)}};
+        Error ->
+            Error
+    end;
+parse_revproxy(_Other) ->
+    {error, syntax}.
+
+parse_revproxy_url(Prefix, Url) ->
+    case (catch yaws_api:parse_url(Url)) of
+        {'EXIT', _} ->
+            {error, url};
+        URL when URL#url.path == "/" ->
+            P = case lists:reverse(Prefix) of
+                    [$/|_Tail] ->
+                        Prefix;
+                    Other ->
+                        lists:reverse(Other)
+                end,
+            {ok, #proxy_cfg{prefix=P, url=URL}};
+        _URL ->
+            {error, "Can't revproxy to a URL with a path "}
+    end.
+
+
 parse_expires(['<', MimeType, ',' , Expire, '>' | Tail], Ack) ->
     {Type, Value} =
         case string:tokens(Expire, "+") of
@@ -2017,6 +2076,18 @@ parse_compressible_mime_types([MimeType | Rest], Acc) ->
     end;
 parse_compressible_mime_types([], Acc) ->
     {ok, Acc}.
+
+
+parse_index_files([]) ->
+    ok;
+parse_index_files([Idx|Rest]) ->
+    case Idx of
+        [$/|_] when Rest /= [] ->
+            {error, "Only the last index should be absolute"};
+        _ ->
+            parse_index_files(Rest)
+    end.
+
 
 
 ssl_start() ->

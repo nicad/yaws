@@ -27,6 +27,11 @@ start() ->
         streamcontent_revproxy_test(),
         keepalive_revproxy_test(),
         rewrite_revproxy_test(),
+        large_content_revproxy_test(),
+        no_content_length_revproxy_test(),
+        failed_req_interception_revproxy_test(),
+        failed_resp_interception_revproxy_test(),
+        good_interception_revproxy_test(),
         fwdproxy_test(),
         ok
     catch
@@ -194,6 +199,51 @@ rewrite_revproxy_test() ->
     ?line Res = Body2,
     ok.
 
+large_content_revproxy_test() ->
+    io:format("large_content_revproxy_test\n", []),
+    Uri = "http://localhost:8004/revproxy/8388608.bin",
+
+    ?line {ok, Bin} = file:read_file("www2/8388608.bin"),
+    ?line {ok, "200", Hdrs, Body0} = ibrowse:send_req(Uri, [], get),
+    ?line "8388608" = proplists:get_value("Content-Length", Hdrs),
+    Body = list_to_binary(Body0),
+    ?line true = (size(Body) == 8388608),
+    ?line Bin = Body,
+    ok.
+
+no_content_length_revproxy_test() ->
+    io:format("no_content_length_revproxy_test\n", []),
+    Uri = "http://localhost:8001/revproxy1/nolengthtest",
+    Res = lists:duplicate(512, $A),
+
+    ?line {ok, "200", Hdrs, Body} = ibrowse:send_req(Uri, [], get),
+    ?line undefined = proplists:get_value("Content-Length", Hdrs),
+    ?line undefined = proplists:get_value("Transfer-Encoding", Hdrs),
+    ?line "close"   = proplists:get_value("Connection", Hdrs),
+    ?line Res = Body,
+    ok.
+
+failed_req_interception_revproxy_test() ->
+    io:format("failed_req_interception_revproxy_test\n", []),
+    Uri = "http://localhost:8005/revproxy1/failedreqinterception",
+    ?line {ok, "500", _, _} = ibrowse:send_req(Uri, [], get),
+    ok.
+
+failed_resp_interception_revproxy_test() ->
+    io:format("failed_resp_interception_revproxy_test\n", []),
+    Uri = "http://localhost:8005/revproxy2/failedrespinterception",
+    ?line {ok, "500", _, _} = ibrowse:send_req(Uri, [], get),
+    ok.
+
+good_interception_revproxy_test() ->
+    io:format("good_interception_revproxy_test\n", []),
+    Uri = "http://localhost:8005/revproxy3/hello.txt",
+    Res = "Hello, World!\n",
+
+    ?line {ok, "200", Hdrs, Body} = ibrowse:send_req(Uri, [], get),
+    ?line Body = Res,
+    ?line "true"   = proplists:get_value("X-Test-Interception", Hdrs),
+    ok.
 
 fwdproxy_test() ->
     io:format("fwdproxy_test\n", []),
@@ -208,7 +258,6 @@ fwdproxy_test() ->
     ?line {ok, "200", _, Body2} = ibrowse:send_req(Uri2, [], get, [], Opts),
     ?line Res = Body2,
     ok.
-
 
 recv_hdrs(Sock) ->
     inet:setopts(Sock, [{packet, http}]),

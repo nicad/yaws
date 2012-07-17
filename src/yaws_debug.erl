@@ -170,7 +170,6 @@ format(GC, F, A) ->
     case ?gc_has_debug(GC) of
         true ->
             error_logger:info_msg("yaws debug:" ++ F, A);
-            %%io:format("yaws:" ++ F, A);
         false ->
             ok
     end.

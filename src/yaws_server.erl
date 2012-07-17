@@ -34,7 +34,8 @@
 
 %% internal exports
 -export([gserv/3,acceptor0/2, load_and_run/2, done_or_continue/0,
-         accumulate_content/1, deliver_accumulated/4, setup_dirs/1,
+         accumulate_content/1, deliver_accumulated/4, deliver_accumulated/1,
+         setup_dirs/1,
          deliver_dyn_part/8, finish_up_dyn_file/2, gserv_loop/4
         ]).
 
@@ -120,7 +121,7 @@ l2a(A) when is_atom(A) -> A.
 
 init(Env) -> %% #env{Trace, TraceOut, Conf, RunMod, Embedded, Id}) ->
     process_flag(trap_exit, true),
-    put(start_time, calendar:local_time ()),  %% for uptime
+    put(start_time, calendar:local_time()),  %% for uptime
     case Env#env.embedded of
         false ->
             Config = (catch yaws_config:load(Env)),
@@ -521,7 +522,7 @@ gserv(Top, GC, Group0) ->
 setup_dirs(GC) ->
     Dir = yaws:id_dir(GC#gconf.id),
     Ctl = yaws:ctl_file(GC#gconf.id),
-    filelib:ensure_dir(Ctl),
+    ok = filelib:ensure_dir(Ctl),
     case file:list_dir(Dir) of
         {ok, LL} ->
             foreach(
@@ -1519,7 +1520,7 @@ body_method(CliSock, IPPort, Req, Head) ->
                           get_chunked_client_data(CliSock, yaws:is_ssl(SC));
                       _ ->
                           <<>>
-                              end;
+                  end;
               Len when is_integer(PPS) ->
                   Int_len = list_to_integer(Len),
                   if
@@ -1569,8 +1570,14 @@ no_body_method(CliSock, IPPort, Req, Head) ->
     handle_request(CliSock, ARG, 0).
 
 
-make_arg(CliSock, IPPort, Head, Req, Bin) ->
+make_arg(CliSock0, IPPort, Head, Req, Bin) ->
     SC = get(sc),
+    CliSock = case yaws:is_ssl(SC) of
+                  nossl ->
+                      CliSock0;
+                  ssl ->
+                      {ssl, CliSock0}
+              end,
     ARG = #arg{clisock = CliSock,
                client_ip_port = IPPort,
                headers = Head,
@@ -2001,27 +2008,31 @@ is_revproxy(ARG, Path, SC = #sconf{revproxy = RevConf}) ->
         {false, _} ->
             is_revproxy1(Path, RevConf);
         {true, _} ->
-            {true, {"/", fwdproxy_url(ARG)}}
+            {true, #proxy_cfg{prefix="/", url=fwdproxy_url(ARG)}}
     end.
 
 is_revproxy1(_,[]) ->
     false;
-is_revproxy1(Path, [{Prefix, URL} | Tail]) ->
-    case yaws:is_prefix(Prefix, Path) of
-        {true,_} ->
-            {true, {Prefix,URL}};
+is_revproxy1(Path, RevConf) ->
+    case lists:keyfind(Path, #proxy_cfg.prefix, RevConf) of
+        #proxy_cfg{}=R ->
+            {true, R};
+        false when Path == "/" ->
+            false;
         false ->
-            is_revproxy1(Path, Tail)
+            is_revproxy1(filename:dirname(Path), RevConf)
     end.
 
 is_redirect_map(_, []) ->
     false;
-is_redirect_map(Path, [E={Prefix, _URL, _AppendMode}|Tail]) ->
-    case yaws:is_prefix(Prefix, Path) of
-        {true, _} ->
+is_redirect_map(Path, RedirMap) ->
+    case lists:keyfind(Path, 1, RedirMap) of
+        {Path, _Url, _AppendMod}=E ->
             {true, E};
+        false when Path == "/" ->
+            false;
         false ->
-            is_redirect_map(Path, Tail)
+            is_redirect_map(filename:dirname(Path), RedirMap)
     end.
 
 %% Find out what which module to call when urltype is unauthorized
@@ -2299,6 +2310,8 @@ handle_ut(CliSock, ARG, UT = #urltype{type = dav}, N) ->
     SC=get(sc),
     Next =
         if
+            Req#http_request.method == 'OPTIONS' ->
+                options;
             Req#http_request.method == 'PUT' ->
                 fun(A) -> yaws_dav:put(SC, A) end;
             Req#http_request.method == 'DELETE' ->
@@ -2325,6 +2338,8 @@ handle_ut(CliSock, ARG, UT = #urltype{type = dav}, N) ->
     case Next of
         error ->
             handle_ut(CliSock, ARG, #urltype{type = error}, N);
+        options ->
+            deliver_options(CliSock, Req, []);
         {regular, Finfo} ->
             handle_ut(CliSock, ARG, UT#urltype{type = regular,
                                                finfo = Finfo}, N);
@@ -4360,6 +4375,8 @@ split_at_segment(Seg,[H|Tail],Acc) ->
 %%
 %%i.e this is an inner function, so no sanity checks here.
 %%
+construct_fullpath(undefined,_,_) ->
+    undefined;
 construct_fullpath(DocRoot,GetPath,VirtualDir) ->
     case VirtualDir of
         [] ->
@@ -4375,45 +4392,40 @@ construct_fullpath(DocRoot,GetPath,VirtualDir) ->
 %%preconditions:
 %% - see 'construct_fullpath'
 %%
-try_index_file(DR, GetPath, VirtualDir) ->
-    FullPath = construct_fullpath(DR, GetPath, VirtualDir),
-
-    case prim_file:read_file_info([FullPath, "index.yaws"]) of
+try_index_file(_FullPath, _GetPath, []) ->
+    noindex;
+try_index_file(FullPath, GetPath, [[$/|_]=Idx|Rest]) ->
+    case (GetPath =:= Idx orelse GetPath =:= Idx++"/") of
+        true  -> try_index_file(FullPath, GetPath, Rest);
+        false -> {redir, Idx}
+    end;
+try_index_file(FullPath, GetPath, [Idx|Rest]) ->
+    case prim_file:read_file_info([FullPath, Idx]) of
         {ok, FI} when FI#file_info.type == regular ->
-            do_url_type(get(sc), GetPath ++ "index.yaws", DR, VirtualDir);
+            {index, Idx};
         _ ->
-            case prim_file:read_file_info([FullPath, "index.html"]) of
-                {ok, FI} when FI#file_info.type == regular ->
-                    do_url_type(get(sc), GetPath ++ "index.html", DR,
-                                VirtualDir);
-                _ ->
-                    case prim_file:read_file_info([FullPath, "index.php"]) of
-                        {ok, FI} when FI#file_info.type == regular ->
-                            do_url_type(get(sc), GetPath ++ "index.php", DR,
-                                        VirtualDir);
-                        _ ->
-                            noindex
-                    end
-            end
+            try_index_file(FullPath, GetPath, Rest)
     end.
 
 
 maybe_return_dir(DR, GetPath,VirtualDir) ->
-    case try_index_file(DR, GetPath,VirtualDir) of
+    SC = get(sc),
+    FullPath = construct_fullpath(DR, GetPath, VirtualDir),
+    case try_index_file(FullPath, GetPath, SC#sconf.index_files) of
+        {index, Idx} ->
+            do_url_type(SC, GetPath ++ Idx, DR, VirtualDir);
+        {redir, NewPath} ->
+            #urltype{type=redir, path=NewPath};
         noindex ->
-            FullPath = construct_fullpath(DR, GetPath, VirtualDir),
-
             case file:list_dir(FullPath) of
                 {ok, List} ->
-                    #urltype{type = directory,
+                    #urltype{type     = directory,
                              fullpath = FullPath,
-                             dir = GetPath,
-                             data = List -- [".yaws_auth"]};
+                             dir      = GetPath,
+                             data     = List -- [".yaws_auth"]};
                 _Err ->
                     #urltype{type=error}
-            end;
-        UT ->
-            UT
+            end
     end.
 
 
@@ -4874,10 +4886,10 @@ close_accepted_if_max(GS,{ok, Socket}) ->
 	    ok;
         true ->
             S=case peername(Socket, GS#gs.ssl) of
-                  {ok, {IP, Port}} ->
-                      io_lib:format("~s:~w", [inet_parse:ntoa(IP), Port]);
-                  _ ->
-                      "unknown"
+                  {unknown, unknown} ->
+                      "unknown";
+                  {IP, Port} ->
+                      io_lib:format("~s:~w", [inet_parse:ntoa(IP), Port])
               end,
             error_logger:format(
               "Max connections reached - closing conn to ~s~n",[S]),
