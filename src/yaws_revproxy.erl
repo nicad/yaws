@@ -45,7 +45,21 @@
 
 %% Initialize the connection to the backend server. If an error occurred, return
 %% an error 404.
-out(#arg{req=Req, headers=Hdrs, state=#proxy_cfg{url=URL}=State}=Arg) ->
+out(#arg{req=Req, headers=Hdrs, state=#proxy_cfg{url=ConfURL}=State}=Arg) ->
+    URL = case State#proxy_cfg.intercept_mod of
+        undefined ->
+            ConfURL;
+        InterceptMod ->
+            case catch InterceptMod:rewrite_url(ConfURL) of
+                {ok, NewURL} ->
+                    NewURL;
+                InterceptError ->
+                    error_logger:error_msg(
+                        "revproxy intercept module ~p:rewrite_url failed: ~p~n",
+                        [InterceptMod, InterceptError]),
+                    exit({error, intercept_mod})
+            end
+    end,
     case connect(URL) of
         {ok, Sock, Type} ->
             ?Debug("Connection established on ~p: Socket=~p, Type=~p~n",
