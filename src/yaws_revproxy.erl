@@ -693,7 +693,20 @@ get_connection_status(Version, ReqHdrs, RespHdrs) ->
 rewrite_request(RPState, Req) ->
     ?Debug("Request path to rewrite:  ~p~n", [Req#http_request.path]),
     {abs_path, Path} = Req#http_request.path,
-    NewPath = strip_prefix(Path, RPState#revproxy.prefix),
+    NewPath = case RPState#revproxy.intercept_mod of
+        undefined ->
+            strip_prefix(Path, RPState#revproxy.prefix);
+        InterceptMod ->
+            case catch InterceptMod:rewrite_path(RPState#revproxy.prefix, Req, Path) of
+                {ok, PathRewritten} ->
+                    PathRewritten;
+                InterceptError ->
+                    error_logger:error_msg(
+                        "revproxy intercept module ~p:rewrite_url failed: ~p~n",
+                        [InterceptMod, InterceptError]),
+                    exit({error, intercept_mod})
+            end
+    end,
     ?Debug("New Request path: ~p~n", [NewPath]),
     Req#http_request{path = {abs_path, NewPath}}.
 
