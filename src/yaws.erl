@@ -346,6 +346,8 @@ set_sc_flags([{fcgi_trace_protocol, Bool}|T], Flags) ->
     set_sc_flags(T, flag(Flags, ?SC_FCGI_TRACE_PROTOCOL, Bool));
 set_sc_flags([{forward_proxy, Bool}|T], Flags) ->
     set_sc_flags(T, flag(Flags, ?SC_FORWARD_PROXY, Bool));
+set_sc_flags([{auth_skip_docroot, Bool}|T], Flags) ->
+    set_sc_flags(T, flag(Flags, ?SC_AUTH_SKIP_DOCROOT, Bool));
 set_sc_flags([_Unknown|T], Flags) ->
     error_logger:format("Unknown and unhandled flag ~p~n", [_Unknown]),
     set_sc_flags(T, Flags);
