@@ -226,6 +226,8 @@ set_gc_flags([{pick_first_virthost_on_nomatch, Bool}|T], Flags) ->
     set_gc_flags(T, flag(Flags, ?GC_PICK_FIRST_VIRTHOST_ON_NOMATCH,Bool));
 set_gc_flags([{use_old_ssl, Bool}|T], Flags) ->
     set_gc_flags(T, flag(Flags,?GC_USE_OLD_SSL,Bool));
+set_gc_flags([{expect_proxy_header, Bool}|T], Flags) ->
+    set_gc_flags(T, flag(Flags, ?GC_EXPECT_PROXY_HEADER, Bool));
 set_gc_flags([_|T], Flags) ->
     set_gc_flags(T, Flags);
 set_gc_flags([], Flags) ->

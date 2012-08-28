@@ -421,7 +421,7 @@ terminate(_Reason, State) ->
 do_listen(GC, SC) ->
     case SC#sconf.ssl of
         undefined ->
-            {nossl, undefined, gen_tcp_listen(SC#sconf.port, listen_opts(SC))};
+            {nossl, undefined, gen_tcp_listen(SC#sconf.port, listen_opts(GC, SC))};
         SSL ->
             {ssl, certinfo(SSL),
              ssl:listen(SC#sconf.port, ssl_listen_opts(GC, SC, SSL))}
@@ -858,7 +858,7 @@ call_start_mod(SC) ->
             end
     end.
 
-listen_opts(SC) ->
+listen_opts(GC, SC) ->
     InetType = if
                    is_tuple( SC#sconf.listen), size( SC#sconf.listen) == 8 ->
                        [inet6];
@@ -867,7 +867,11 @@ listen_opts(SC) ->
                end,
     Opts = [binary,
      {ip, SC#sconf.listen},
-     {packet, http},
+     if ?gc_expect_proxy_header(GC) ->
+	  {packet, line};
+       true ->
+	  {packet, http}
+     end,
      {packet_size, 16#4000},
      {recbuf, 8192},
      {reuseaddr, true},
@@ -1008,8 +1012,28 @@ acceptor0(GS, Top) ->
                 true ->
                     ok
             end,
-            {IP,Port} = peername(Client, GS#gs.ssl),
             put(trace_filter, yaws_trace:get_filter()),
+            {IP,Port} = if ?gc_expect_proxy_header(GS#gs.gconf) ->
+			       case yaws:cli_recv(Client, 0, GS#gs.ssl) of
+				   {ok, L} when is_binary(L) ->
+				       yaws:setopts(Client, [{packet, http}], GS#gs.ssl),
+				       case parse_proxy_header(binary_to_list(L)) of
+					   {ok, RAddr, RPort} ->
+					       {RAddr, RPort};
+					   _ ->
+					       error_logger:format("Invalid PROXY header format: ~p~n", [L]),
+					       Top ! {self(), decrement},
+					       exit(normal)
+				       end;
+				   Err ->
+				       error_logger:format("Failure reading expected PROXY header: ~p~n", [Err]),
+				       Top ! {self(), decrement},
+				       exit(normal)
+			       end;
+			   true ->
+			       peername(Client, GS#gs.ssl)
+			end,
+	    io:format("~p", [{IP, Port}]),
             Res = (catch aloop(Client, {IP,Port}, GS,  0)),
             %% Skip closing the socket, as required by web sockets & stream
             %% processes.
@@ -1300,6 +1324,18 @@ peername(CliSock, nossl) ->
         _         -> {unknown, unknown}
     end.
 
+parse_proxy_header (L) ->
+    case string:tokens(L, " \r\n") of
+	["PROXY", AF, RAddr, _LAddr, RPort, _LPort] when AF =:= "TCP4" orelse AF =:= "TCP6" ->
+	    case catch {inet_parse:address(RAddr), list_to_integer(RPort)} of
+		{{ok, RIP}, RP} when is_integer(RP) ->
+		    {ok, RIP, RP};
+		_ ->
+		    {error, invalid_header}
+	    end;
+	_ ->
+	    {error, invalid_header}
+    end.
 
 deepforeach(_F, []) ->
     ok;

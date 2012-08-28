@@ -857,6 +857,15 @@ fload(FD, globals, GC, C, Cs, Lno, Chars) ->
                 false ->
                     {error, ?F("Expect true|false at line ~w", [Lno])}
             end;
+        ["expect_proxy_header",'=',Bool] ->
+	    case is_bool(Bool) of
+                {true, Val} ->
+                    fload(FD, globals,
+                          ?gc_set_expect_proxy_header(GC,Val),
+                          C, Cs, Lno+1, Next);
+                false ->
+                    {error, ?F("Expect true|false at line ~w", [Lno])}
+            end;
         ["use_large_ssl_pool", '=',  _Bool] ->
             %% just ignore - not relevant any longer
             fload(FD, globals, GC,
