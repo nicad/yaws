@@ -19,7 +19,7 @@
 -define(GC_PICK_FIRST_VIRTHOST_ON_NOMATCH,  64).
 -define(GC_USE_FDSRV,                      128).
 -define(GC_USE_OLD_SSL,                    256).
-
+-define(GC_EXPECT_PROXY_HEADER,		   512).
 
 
 -define(GC_DEF, ?GC_FAIL_ON_BIND_ERR).
@@ -38,6 +38,8 @@
         ((GC#gconf.flags band ?GC_PICK_FIRST_VIRTHOST_ON_NOMATCH) /= 0)).
 -define(gc_use_old_ssl(GC),
         ((GC#gconf.flags band ?GC_USE_OLD_SSL) /= 0)).
+-define(gc_expect_proxy_header(GC),
+        (((GC)#gconf.flags band ?GC_EXPECT_PROXY_HEADER) /= 0)).
 
 -define(gc_set_tty_trace(GC, Bool),
         GC#gconf{flags = yaws:flag(GC#gconf.flags,?GC_TTY_TRACE, Bool)}).
@@ -55,6 +57,8 @@
                                    ?GC_PICK_FIRST_VIRTHOST_ON_NOMATCH,Bool)}).
 -define(gc_set_use_old_ssl(GC, Bool),
         GC#gconf{flags = yaws:flag(GC#gconf.flags,?GC_USE_OLD_SSL,Bool)}).
+-define(gc_set_expect_proxy_header(GC, Bool),
+        GC#gconf{flags = yaws:flag(GC#gconf.flags,?GC_EXPECT_PROXY_HEADER,Bool)}).
 
 
 
@@ -129,6 +133,7 @@
 -define(SC_FCGI_LOG_APP_ERROR,  2048).
 -define(SC_FORWARD_PROXY,       4096).
 -define(SC_AUTH_SKIP_DOCROOT,   8192).
+
 
 
 

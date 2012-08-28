@@ -226,6 +226,8 @@ set_gc_flags([{pick_first_virthost_on_nomatch, Bool}|T], Flags) ->
     set_gc_flags(T, flag(Flags, ?GC_PICK_FIRST_VIRTHOST_ON_NOMATCH,Bool));
 set_gc_flags([{use_old_ssl, Bool}|T], Flags) ->
     set_gc_flags(T, flag(Flags,?GC_USE_OLD_SSL,Bool));
+set_gc_flags([{expect_proxy_header, Bool}|T], Flags) ->
+    set_gc_flags(T, flag(Flags, ?GC_EXPECT_PROXY_HEADER, Bool));
 set_gc_flags([_|T], Flags) ->
     set_gc_flags(T, Flags);
 set_gc_flags([], Flags) ->
@@ -346,6 +348,8 @@ set_sc_flags([{fcgi_trace_protocol, Bool}|T], Flags) ->
     set_sc_flags(T, flag(Flags, ?SC_FCGI_TRACE_PROTOCOL, Bool));
 set_sc_flags([{forward_proxy, Bool}|T], Flags) ->
     set_sc_flags(T, flag(Flags, ?SC_FORWARD_PROXY, Bool));
+set_sc_flags([{auth_skip_docroot, Bool}|T], Flags) ->
+    set_sc_flags(T, flag(Flags, ?SC_AUTH_SKIP_DOCROOT, Bool));
 set_sc_flags([_Unknown|T], Flags) ->
     error_logger:format("Unknown and unhandled flag ~p~n", [_Unknown]),
     set_sc_flags(T, Flags);
