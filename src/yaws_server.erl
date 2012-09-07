@@ -1034,7 +1034,6 @@ acceptor0(GS, Top) ->
 			   true ->
 			       peername(Client, GS#gs.ssl)
 			end,
-	    io:format("~p", [{IP, Port}]),
             Res = (catch aloop(Client, {IP,Port}, GS,  0)),
             %% Skip closing the socket, as required by web sockets & stream
             %% processes.
