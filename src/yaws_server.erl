@@ -1566,10 +1566,10 @@ body_method(CliSock, IPPort, Req, Head) ->
                       Int_len == 0 ->
                           <<>>;
                       PPS < Int_len ->
-                          {partial, get_client_data(CliSock, PPS,
+                          {partial, get_client_data(CliSock, IPPort, PPS,
                                                     yaws:is_ssl(SC))};
                       true ->
-                          get_client_data(CliSock, Int_len,
+                          get_client_data(CliSock, IPPort, Int_len,
                                           yaws:is_ssl(SC))
                   end;
               Len when PPS == nolimit ->
@@ -1580,7 +1580,7 @@ body_method(CliSock, IPPort, Req, Head) ->
                       Int_len == 0 ->
                           <<>>;
                       true ->
-                          get_client_data(CliSock, Int_len,
+                          get_client_data(CliSock, IPPort, Int_len,
                                           yaws:is_ssl(SC))
                   end
           end,
@@ -2627,22 +2627,22 @@ del_old_files(_GC, [{_FileAtom, spec, _Mtime1, Spec, _}]) ->
       end, Spec).
 
 
-get_client_data(CliSock, Len, SSlBool) ->
-    get_client_data(CliSock, Len, [], SSlBool).
+get_client_data(CliSock, IPPort, Len, SSlBool) ->
+    get_client_data(CliSock, IPPort, Len, [], SSlBool).
 
-get_client_data(_CliSock, 0, Bs, _SSlBool) ->
+get_client_data(_CliSock, _IPPort, 0, Bs, _SSlBool) ->
     list_to_binary(Bs);
-get_client_data(CliSock, Len, Bs, SSlBool) ->
+get_client_data(CliSock, IPPort, Len, Bs, SSlBool) ->
     case yaws:cli_recv(CliSock, Len, SSlBool) of
         {ok, B} ->
-            get_client_data(CliSock, Len-size(B), [Bs,B], SSlBool);
+            get_client_data(CliSock, IPPort, Len-size(B), [Bs,B], SSlBool);
         Other ->
 	    SC = get(sc),
-	    apply(SC#sconf.errormod_conn, conn_read_error, [CliSock, Len, Other]),
+	    apply(SC#sconf.errormod_conn, conn_read_error, [CliSock, IPPort, Len, Other]),
             exit(normal)
     end.
 
-conn_read_error (_CliSock, _ReadLen, Err) ->
+conn_read_error (_CliSock, _IPPort, _ReadLen, Err) ->
     error_logger:format("get_client_data: ~p~n", [Err]).
 
 
@@ -3739,10 +3739,10 @@ get_more_post_data(PPS, ARG) ->
         Len ->
             Int_len = list_to_integer(Len),
             if N + PPS < Int_len ->
-                    Bin = get_client_data(ARG#arg.clisock, N, yaws:is_ssl(SC)),
+                    Bin = get_client_data(ARG#arg.clisock, ARG#arg.client_ip_port, N, yaws:is_ssl(SC)),
                     {partial, Bin};
                true ->
-                    get_client_data(ARG#arg.clisock, Int_len - PPS,
+                    get_client_data(ARG#arg.clisock, ARG#arg.client_ip_port, Int_len - PPS,
                                     yaws:is_ssl(SC))
             end
     end.
