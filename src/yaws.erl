@@ -263,6 +263,7 @@ setup_sconf(DocRoot, D, SL) ->
            errormod_404          = lkup(errormod_404, SL, D#sconf.errormod_404),
            errormod_crash        = lkup(errormod_crash, SL,
                                         D#sconf.errormod_crash),
+	   errormod_conn	 = lkup(errormod_conn, SL, D#sconf.errormod_conn),
            arg_rewrite_mod       = lkup(arg_rewrite_mod, SL,
                                         D#sconf.arg_rewrite_mod),
            logger_mod            = lkup(logger_mod, SL, D#sconf.logger_mod),

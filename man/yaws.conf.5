@@ -631,6 +631,20 @@ The function must return, \fI{content,MimeType,Cont}\fR or \fI{html, Str}\fR or
 \fI{ehtml, Term}\fR. That data will be shipped to the client.
 
 .TP
+\fBerrormod_conn = Module\fR
+It is possible to set a special module that does error handling
+for client connection errors.  The default for a client read
+error is to send a short message to the error_logger.
+.br
+The function \fIModule:conn_read_error(CliSock, IPPort, Len, Err)\fR
+will be called. The \fILen\fR is the number of bytes being
+read from the client.  The \fIErr\fR is the error that has
+occured.
+.br
+The function return is ignored as the client process will
+immediately exit.
+
+.TP
 \fBexpires = ListOfExpires\fR
 Controls the setting of the \fIExpires\fR HTTP header and the \fImax-age\fR
 directive of the \fICache-Control\fR HTTP header in server responses for
