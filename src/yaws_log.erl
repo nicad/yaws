@@ -351,6 +351,8 @@ handle_cast({yaws_hupped, _}, State) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %%----------------------------------------------------------------------
 handle_info(secs3, State) ->
+    %% Check if log file needs to be rotated or has be externally rotated
+    yaws_logger:rotate(State#state.log_wrap_size),
     {noreply, State#state{now = fmtnow()}};
 
 %% once every 10 minutes, check log sizes
@@ -361,6 +363,9 @@ handle_info(minute10, State) ->
         {ok, Size} when  State#state.log_wrap_size > 0,
                        Size > State#state.log_wrap_size ->
             gen_event:call(error_logger, yaws_log_file_h, wrap, infinity);
+        {ok, Size} when  State#state.log_wrap_size == 0,
+                       Size == 0 ->
+            gen_event:call(error_logger, yaws_log_file_h, reopen, infinity);
         {error, enoent} ->
             gen_event:call(error_logger, yaws_log_file_h, reopen, infinity);
         _ ->
@@ -376,6 +381,8 @@ wrap_p(Filename, LogWrapSize) ->
     case file:read_file_info(Filename) of
         {ok, FI} when FI#file_info.size > LogWrapSize, LogWrapSize > 0 ->
             true;
+        {ok, FI} when FI#file_info.size == 0, LogWrapSize == 0 -> %% rotate and re-created
+            enoent;
         {ok, _FI} ->
             false;
         {error, enoent} ->
