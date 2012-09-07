@@ -232,6 +232,7 @@
           errormod_401 = yaws_outmod,   % the default 401 error module
           errormod_404 = yaws_outmod,   % the default 404 error module
           errormod_crash = yaws_outmod, % use the same module for crashes
+	  errormod_conn = yaws_server,	% handling connection errors
           arg_rewrite_mod = yaws,
           logger_mod = yaws_log,        % access/auth logging module
           opaque = [],                  % useful in embedded mode

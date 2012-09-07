@@ -29,7 +29,8 @@
          getconf/0,
          stats/0,
          gs_status/0,
-         ssi/3,ssi/5,ssi/6
+         ssi/3,ssi/5,ssi/6,
+	 conn_read_error/3
         ]).
 
 %% internal exports
@@ -2635,10 +2636,15 @@ get_client_data(CliSock, Len, Bs, SSlBool) ->
     case yaws:cli_recv(CliSock, Len, SSlBool) of
         {ok, B} ->
             get_client_data(CliSock, Len-size(B), [Bs,B], SSlBool);
-        _Other ->
-            error_logger:format("get_client_data: ~p~n", [_Other]),
+        Other ->
+	    SC = get(sc),
+	    apply(SC#sconf.errormod_conn, conn_read_error, [CliSock, Len, Other]),
             exit(normal)
     end.
+
+conn_read_error (_CliSock, _ReadLen, Err) ->
+    error_logger:format("get_client_data: ~p~n", [Err]).
+
 
 %% not nice to support this for ssl sockets
 get_chunked_client_data(CliSock,SSL) ->

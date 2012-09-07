@@ -1119,6 +1119,10 @@ fload(FD, server, GC, C, Cs, Lno, Chars) ->
             C2 = C#sconf{errormod_401 = list_to_atom(Module)},
             fload(FD, server, GC, C2, Cs, Lno+1, Next);
 
+        ["errormod_conn", '=' , Module] ->
+            C2 = C#sconf{errormod_conn = list_to_atom(Module)},
+            fload(FD, server, GC, C2, Cs, Lno+1, Next);
+
         ["arg_rewrite_mod", '=', Module] ->
             C2 = C#sconf{arg_rewrite_mod = list_to_atom(Module)},
             fload(FD, server, GC, C2, Cs, Lno+1, Next);
