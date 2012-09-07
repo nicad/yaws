@@ -30,7 +30,7 @@
          stats/0,
          gs_status/0,
          ssi/3,ssi/5,ssi/6,
-	 conn_read_error/3
+	 conn_read_error/4
         ]).
 
 %% internal exports
