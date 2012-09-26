@@ -1819,6 +1819,8 @@ http_recv_request(CliSock, SSL) ->
             http_recv_request(CliSock,SSL);
         {_, {http_error, _}} ->
             bad_request;
+	{error, ebadf} ->
+	    closed;
         {error, closed} ->
             closed;
         {error, timeout} ->
