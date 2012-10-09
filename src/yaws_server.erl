@@ -859,7 +859,7 @@ call_start_mod(SC) ->
             end
     end.
 
-listen_opts(GC, SC) ->
+listen_opts(_GC, SC) ->
     InetType = if
                    is_tuple( SC#sconf.listen), size( SC#sconf.listen) == 8 ->
                        [inet6];
@@ -868,11 +868,7 @@ listen_opts(GC, SC) ->
                end,
     Opts = [binary,
      {ip, SC#sconf.listen},
-     if ?gc_expect_proxy_header(GC) ->
-	  {packet, line};
-       true ->
-	  {packet, http}
-     end,
+     {packet, http},
      {packet_size, 16#4000},
      {recbuf, 8192},
      {reuseaddr, true},
@@ -1014,26 +1010,8 @@ acceptor0(GS, Top) ->
                     ok
             end,
             put(trace_filter, yaws_trace:get_filter()),
-            {IP,Port} = if ?gc_expect_proxy_header(GS#gs.gconf) ->
-			       case yaws:cli_recv(Client, 0, GS#gs.ssl) of
-				   {ok, L} when is_binary(L) ->
-				       yaws:setopts(Client, [{packet, http}], GS#gs.ssl),
-				       case parse_proxy_header(binary_to_list(L)) of
-					   {ok, RAddr, RPort} ->
-					       {RAddr, RPort};
-					   _ ->
-					       error_logger:format("Invalid PROXY header format: ~p~n", [L]),
-					       Top ! {self(), decrement},
-					       exit(normal)
-				       end;
-				   Err ->
-				       error_logger:format("Failure reading expected PROXY header: ~p~n", [Err]),
-				       Top ! {self(), decrement},
-				       exit(normal)
-			       end;
-			   true ->
-			       peername(Client, GS#gs.ssl)
-			end,
+            {IP,Port} = peername(Client, GS#gs.ssl),
+	    erase(request_proxy_ip_port),
             Res = (catch aloop(Client, {IP,Port}, GS,  0)),
             %% Skip closing the socket, as required by web sockets & stream
             %% processes.
@@ -1166,20 +1144,32 @@ aloop(CliSock, {IP,Port}, GS, Num) ->
             ?TC([{record, SC, sconf}]),
             ?Debug("Headers = ~s~n", [?format_record(H, headers)]),
             ?Debug("Request = ~s~n", [?format_record(Req, http_request)]),
-            run_trace_filter(GS, IP, Req, H),
+            {PeerIP,PeerPort} = case {?sc_expect_proxy_header(SC), get(request_proxy_ip_port)} of
+				    {true, undefined} ->
+					error_logger:format("PROXY header missing on connection", []),
+					exit(normal);
+				    {true, ProxyIP} ->
+					ProxyIP;
+				    {false, undefined} ->
+					{IP,Port};
+				    _ ->
+					error_logger:format("Ignoring extraneous PROXY header", []),
+					{IP,Port}
+				end,
+            run_trace_filter(GS, PeerIP, Req, H),
             put(outh, #outh{}),
             put(sc, SC),
             yaws_stats:hit(),
             check_keepalive_maxuses(GS, Num),
-            Call = case yaws_shaper:check(SC, IP) of
+            Call = case yaws_shaper:check(SC, PeerIP) of
                        allow ->
                            call_method(Req#http_request.method,CliSock,
-                                       {IP,Port},Req,H);
+                                       {PeerIP,PeerPort},Req,H);
                        {deny, Status, Msg} ->
                            deliver_xxx(CliSock, Req, Status, Msg)
                    end,
             Call2 = fix_keepalive_maxuses(Call),
-            handle_method_result(Call2, CliSock, {IP,Port}, GS, Req, H, Num);
+            handle_method_result(Call2, CliSock, {PeerIP,PeerPort}, GS, Req, H, Num);
         closed ->
             case yaws_trace:get_type(GS#gs.gconf) of
                 undefined -> ok;
@@ -1322,19 +1312,6 @@ peername(CliSock, nossl) ->
     case inet:peername(CliSock) of
         {ok, Res} -> Res;
         _         -> {unknown, unknown}
-    end.
-
-parse_proxy_header (L) ->
-    case string:tokens(L, " \r\n") of
-	["PROXY", AF, RAddr, _LAddr, RPort, _LPort] when AF =:= "TCP4" orelse AF =:= "TCP6" ->
-	    case catch {inet_parse:address(RAddr), list_to_integer(RPort)} of
-		{{ok, RIP}, RP} when is_integer(RP) ->
-		    {ok, RIP, RP};
-		_ ->
-		    {error, invalid_header}
-	    end;
-	_ ->
-	    {error, invalid_header}
     end.
 
 deepforeach(_F, []) ->

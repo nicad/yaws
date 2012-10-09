@@ -857,15 +857,6 @@ fload(FD, globals, GC, C, Cs, Lno, Chars) ->
                 false ->
                     {error, ?F("Expect true|false at line ~w", [Lno])}
             end;
-        ["expect_proxy_header",'=',Bool] ->
-	    case is_bool(Bool) of
-                {true, Val} ->
-                    fload(FD, globals,
-                          ?gc_set_expect_proxy_header(GC,Val),
-                          C, Cs, Lno+1, Next);
-                false ->
-                    {error, ?F("Expect true|false at line ~w", [Lno])}
-            end;
         ["use_large_ssl_pool", '=',  _Bool] ->
             %% just ignore - not relevant any longer
             fload(FD, globals, GC,
@@ -1298,7 +1289,16 @@ fload(FD, server, GC, C, Cs, Lno, Chars) ->
             C2 = C#sconf{shaper = list_to_atom(Module)},
             fload(FD, server, GC, C2, Cs, Lno+1, Next);
 
-        [H|T] ->
+        ["expect_proxy_header",'=',Bool] ->
+	    case is_bool(Bool) of
+                {true, Val} ->
+                    C2 = ?sc_set_expect_proxy_header(C, Val),
+                    fload(FD, server, GC, C2, Cs, Lno+1, Next);
+                false ->
+                    {error, ?F("Expect true|false at line ~w", [Lno])}
+            end;
+
+	[H|T] ->
             {error, ?F("Unexpected input ~p at line ~w", [[H|T], Lno])};
         Err ->
             Err
