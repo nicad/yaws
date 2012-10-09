@@ -19,7 +19,6 @@
 -define(GC_PICK_FIRST_VIRTHOST_ON_NOMATCH,  64).
 -define(GC_USE_FDSRV,                      128).
 -define(GC_USE_OLD_SSL,                    256).
--define(GC_EXPECT_PROXY_HEADER,		   512).
 
 
 -define(GC_DEF, ?GC_FAIL_ON_BIND_ERR).
@@ -38,8 +37,6 @@
         ((GC#gconf.flags band ?GC_PICK_FIRST_VIRTHOST_ON_NOMATCH) /= 0)).
 -define(gc_use_old_ssl(GC),
         ((GC#gconf.flags band ?GC_USE_OLD_SSL) /= 0)).
--define(gc_expect_proxy_header(GC),
-        (((GC)#gconf.flags band ?GC_EXPECT_PROXY_HEADER) /= 0)).
 
 -define(gc_set_tty_trace(GC, Bool),
         GC#gconf{flags = yaws:flag(GC#gconf.flags,?GC_TTY_TRACE, Bool)}).
@@ -57,8 +54,6 @@
                                    ?GC_PICK_FIRST_VIRTHOST_ON_NOMATCH,Bool)}).
 -define(gc_set_use_old_ssl(GC, Bool),
         GC#gconf{flags = yaws:flag(GC#gconf.flags,?GC_USE_OLD_SSL,Bool)}).
--define(gc_set_expect_proxy_header(GC, Bool),
-        GC#gconf{flags = yaws:flag(GC#gconf.flags,?GC_EXPECT_PROXY_HEADER,Bool)}).
 
 
 
@@ -133,6 +128,7 @@
 -define(SC_FCGI_LOG_APP_ERROR,  2048).
 -define(SC_FORWARD_PROXY,       4096).
 -define(SC_AUTH_SKIP_DOCROOT,   8192).
+-define(SC_EXPECT_PROXY_HEADER,16384).
 
 
 
@@ -165,6 +161,8 @@
         (((SC)#sconf.flags band ?SC_FORWARD_PROXY) /= 0)).
 -define(sc_auth_skip_docroot(SC),
         (((SC)#sconf.flags band ?SC_AUTH_SKIP_DOCROOT) /= 0)).
+-define(sc_expect_proxy_header(SC),
+        (((SC)#sconf.flags band ?SC_EXPECT_PROXY_HEADER) /= 0)).
 
 
 -define(sc_set_access_log(SC, Bool),
@@ -197,6 +195,8 @@
         SC#sconf{flags = yaws:flag(SC#sconf.flags, ?SC_FORWARD_PROXY, Bool)}).
 -define(sc_set_auth_skip_docroot(SC, Bool),
         SC#sconf{flags = yaws:flag(SC#sconf.flags,?SC_AUTH_SKIP_DOCROOT,Bool)}).
+-define(sc_set_expect_proxy_header(SC, Bool),
+        SC#sconf{flags = yaws:flag(SC#sconf.flags,?SC_EXPECT_PROXY_HEADER,Bool)}).
 
 
 %% server conf
@@ -232,6 +232,7 @@
           errormod_401 = yaws_outmod,   % the default 401 error module
           errormod_404 = yaws_outmod,   % the default 404 error module
           errormod_crash = yaws_outmod, % use the same module for crashes
+	  errormod_conn = yaws_server,	% handling connection errors
           arg_rewrite_mod = yaws,
           logger_mod = yaws_log,        % access/auth logging module
           opaque = [],                  % useful in embedded mode

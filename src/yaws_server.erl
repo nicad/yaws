@@ -29,7 +29,8 @@
          getconf/0,
          stats/0,
          gs_status/0,
-         ssi/3,ssi/5,ssi/6
+         ssi/3,ssi/5,ssi/6,
+	 conn_read_error/4
         ]).
 
 %% internal exports
@@ -858,7 +859,7 @@ call_start_mod(SC) ->
             end
     end.
 
-listen_opts(GC, SC) ->
+listen_opts(_GC, SC) ->
     InetType = if
                    is_tuple( SC#sconf.listen), size( SC#sconf.listen) == 8 ->
                        [inet6];
@@ -867,11 +868,7 @@ listen_opts(GC, SC) ->
                end,
     Opts = [binary,
      {ip, SC#sconf.listen},
-     if ?gc_expect_proxy_header(GC) ->
-	  {packet, line};
-       true ->
-	  {packet, http}
-     end,
+     {packet, http},
      {packet_size, 16#4000},
      {recbuf, 8192},
      {reuseaddr, true},
@@ -1013,27 +1010,8 @@ acceptor0(GS, Top) ->
                     ok
             end,
             put(trace_filter, yaws_trace:get_filter()),
-            {IP,Port} = if ?gc_expect_proxy_header(GS#gs.gconf) ->
-			       case yaws:cli_recv(Client, 0, GS#gs.ssl) of
-				   {ok, L} when is_binary(L) ->
-				       yaws:setopts(Client, [{packet, http}], GS#gs.ssl),
-				       case parse_proxy_header(binary_to_list(L)) of
-					   {ok, RAddr, RPort} ->
-					       {RAddr, RPort};
-					   _ ->
-					       error_logger:format("Invalid PROXY header format: ~p~n", [L]),
-					       Top ! {self(), decrement},
-					       exit(normal)
-				       end;
-				   Err ->
-				       error_logger:format("Failure reading expected PROXY header: ~p~n", [Err]),
-				       Top ! {self(), decrement},
-				       exit(normal)
-			       end;
-			   true ->
-			       peername(Client, GS#gs.ssl)
-			end,
-	    io:format("~p", [{IP, Port}]),
+            {IP,Port} = peername(Client, GS#gs.ssl),
+	    erase(request_proxy_ip_port),
             Res = (catch aloop(Client, {IP,Port}, GS,  0)),
             %% Skip closing the socket, as required by web sockets & stream
             %% processes.
@@ -1166,20 +1144,32 @@ aloop(CliSock, {IP,Port}, GS, Num) ->
             ?TC([{record, SC, sconf}]),
             ?Debug("Headers = ~s~n", [?format_record(H, headers)]),
             ?Debug("Request = ~s~n", [?format_record(Req, http_request)]),
-            run_trace_filter(GS, IP, Req, H),
+            {PeerIP,PeerPort} = case {?sc_expect_proxy_header(SC), get(request_proxy_ip_port)} of
+				    {true, undefined} ->
+					error_logger:format("PROXY header missing on connection", []),
+					exit(normal);
+				    {true, ProxyIP} ->
+					ProxyIP;
+				    {false, undefined} ->
+					{IP,Port};
+				    _ ->
+					error_logger:format("Ignoring extraneous PROXY header", []),
+					{IP,Port}
+				end,
+            run_trace_filter(GS, PeerIP, Req, H),
             put(outh, #outh{}),
             put(sc, SC),
             yaws_stats:hit(),
             check_keepalive_maxuses(GS, Num),
-            Call = case yaws_shaper:check(SC, IP) of
+            Call = case yaws_shaper:check(SC, PeerIP) of
                        allow ->
                            call_method(Req#http_request.method,CliSock,
-                                       {IP,Port},Req,H);
+                                       {PeerIP,PeerPort},Req,H);
                        {deny, Status, Msg} ->
                            deliver_xxx(CliSock, Req, Status, Msg)
                    end,
             Call2 = fix_keepalive_maxuses(Call),
-            handle_method_result(Call2, CliSock, {IP,Port}, GS, Req, H, Num);
+            handle_method_result(Call2, CliSock, {PeerIP,PeerPort}, GS, Req, H, Num);
         closed ->
             case yaws_trace:get_type(GS#gs.gconf) of
                 undefined -> ok;
@@ -1322,19 +1312,6 @@ peername(CliSock, nossl) ->
     case inet:peername(CliSock) of
         {ok, Res} -> Res;
         _         -> {unknown, unknown}
-    end.
-
-parse_proxy_header (L) ->
-    case string:tokens(L, " \r\n") of
-	["PROXY", AF, RAddr, _LAddr, RPort, _LPort] when AF =:= "TCP4" orelse AF =:= "TCP6" ->
-	    case catch {inet_parse:address(RAddr), list_to_integer(RPort)} of
-		{{ok, RIP}, RP} when is_integer(RP) ->
-		    {ok, RIP, RP};
-		_ ->
-		    {error, invalid_header}
-	    end;
-	_ ->
-	    {error, invalid_header}
     end.
 
 deepforeach(_F, []) ->
@@ -1565,10 +1542,10 @@ body_method(CliSock, IPPort, Req, Head) ->
                       Int_len == 0 ->
                           <<>>;
                       PPS < Int_len ->
-                          {partial, get_client_data(CliSock, PPS,
+                          {partial, get_client_data(CliSock, IPPort, PPS,
                                                     yaws:is_ssl(SC))};
                       true ->
-                          get_client_data(CliSock, Int_len,
+                          get_client_data(CliSock, IPPort, Int_len,
                                           yaws:is_ssl(SC))
                   end;
               Len when PPS == nolimit ->
@@ -1579,7 +1556,7 @@ body_method(CliSock, IPPort, Req, Head) ->
                       Int_len == 0 ->
                           <<>>;
                       true ->
-                          get_client_data(CliSock, Int_len,
+                          get_client_data(CliSock, IPPort, Int_len,
                                           yaws:is_ssl(SC))
                   end
           end,
@@ -2626,19 +2603,24 @@ del_old_files(_GC, [{_FileAtom, spec, _Mtime1, Spec, _}]) ->
       end, Spec).
 
 
-get_client_data(CliSock, Len, SSlBool) ->
-    get_client_data(CliSock, Len, [], SSlBool).
+get_client_data(CliSock, IPPort, Len, SSlBool) ->
+    get_client_data(CliSock, IPPort, Len, [], SSlBool).
 
-get_client_data(_CliSock, 0, Bs, _SSlBool) ->
+get_client_data(_CliSock, _IPPort, 0, Bs, _SSlBool) ->
     list_to_binary(Bs);
-get_client_data(CliSock, Len, Bs, SSlBool) ->
+get_client_data(CliSock, IPPort, Len, Bs, SSlBool) ->
     case yaws:cli_recv(CliSock, Len, SSlBool) of
         {ok, B} ->
-            get_client_data(CliSock, Len-size(B), [Bs,B], SSlBool);
-        _Other ->
-            ?Debug("get_client_data: ~p~n", [_Other]),
+            get_client_data(CliSock, IPPort, Len-size(B), [Bs,B], SSlBool);
+        Other ->
+	    SC = get(sc),
+	    apply(SC#sconf.errormod_conn, conn_read_error, [CliSock, IPPort, Len, Other]),
             exit(normal)
     end.
+
+conn_read_error (_CliSock, _IPPort, _ReadLen, Err) ->
+    error_logger:format("get_client_data: ~p~n", [Err]).
+
 
 %% not nice to support this for ssl sockets
 get_chunked_client_data(CliSock,SSL) ->
@@ -3733,10 +3715,10 @@ get_more_post_data(PPS, ARG) ->
         Len ->
             Int_len = list_to_integer(Len),
             if N + PPS < Int_len ->
-                    Bin = get_client_data(ARG#arg.clisock, N, yaws:is_ssl(SC)),
+                    Bin = get_client_data(ARG#arg.clisock, ARG#arg.client_ip_port, N, yaws:is_ssl(SC)),
                     {partial, Bin};
                true ->
-                    get_client_data(ARG#arg.clisock, Int_len - PPS,
+                    get_client_data(ARG#arg.clisock, ARG#arg.client_ip_port, Int_len - PPS,
                                     yaws:is_ssl(SC))
             end
     end.
@@ -3880,8 +3862,13 @@ deliver_large_file(CliSock,  _Req, UT, Range) ->
 
 send_file(CliSock, Path, all, undefined) when is_port(CliSock) ->
     ?Debug("send_file(~p,~p,no ...)~n", [CliSock, Path]),
-    {ok, Size} = yaws_sendfile:send(CliSock, Path),
-    yaws_stats:sent(Size);
+    case yaws_sendfile:send(CliSock, Path) of
+	{ok, Size} ->
+	    yaws_stats:sent(Size);
+	Err ->
+	    ?Debug("send_file(~p,~p): ~p~n", [CliSock, Path, Err]),
+	    Err
+    end;
 send_file(CliSock, Path, all, undefined) ->
     ?Debug("send_file(~p,~p,no ...)~n", [CliSock, Path]),
     {ok, Fd} = file:open(Path, [raw, binary, read]),
@@ -3899,8 +3886,13 @@ send_file(CliSock, Path, all, Priv) ->
     {ok, Fd} = file:open(Path, [raw, binary, read]),
     send_file(CliSock, Fd, Priv);
 send_file(CliSock, Path,  {fromto, From, To, _Tot}, _) when is_port(CliSock) ->
-    {ok, Size} = yaws_sendfile:send(CliSock, Path, From, (To-From+1)),
-    yaws_stats:sent(Size);
+    case yaws_sendfile:send(CliSock, Path, From, (To-From+1)) of
+	{ok, Size} ->
+	    yaws_stats:sent(Size);
+	Err ->
+	    ?Debug("send_file(~p,~p): ~p~n", [CliSock, Path, Err]),
+	    Err
+    end;
 send_file(CliSock, Path,  {fromto, From, To, _Tot}, _) ->
     {ok, Fd} = file:open(Path, [raw, binary, read]),
     file:position(Fd, {bof, From}),

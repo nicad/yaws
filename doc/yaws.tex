@@ -2687,6 +2687,19 @@ The following directives are allowed inside a server definition.
               \verb+{html, Str}+ or \verb+{ehtml, Term}+. That data will be
               shipped to the client.
 
+\item       \verb+errormod_conn = Module+ ---
+              It is possible to set a special module that does error handling
+              for client connection errors.  The default for a client read
+              error is to send a short message to the error_logger.
+
+              The function \verb+Module:conn_read_error(CliSock, IPPort, Len, Err)+
+              will be called. The \verb+Len+ is the number of bytes being
+              read from the client.  The \verb+Err+ is the error that has
+              occured.
+
+              The function return is ignored as the client process will
+              immediately exit.
+
 \item       \verb+expires = ListOfExpires+ ---
               Controls the setting of the \verb+Expires+ HTTP header and the
               \verb+max-age+ directive of the \verb+Cache-Control+ HTTP header
