@@ -1147,6 +1147,8 @@ aloop(CliSock, {IP,Port}, GS, Num) ->
             {PeerIP,PeerPort} = case {?sc_expect_proxy_header(SC), get(request_proxy_ip_port)} of
 				    {true, undefined} ->
 					error_logger:format("PROXY header missing on connection", []),
+					error_logger:format("Headers = ~s~n", [?format_record(H, headers)]),
+					error_logger:format("Request = ~s~n", [?format_record(Req, http_request)]),
 					exit(normal);
 				    {true, ProxyIP} ->
 					ProxyIP;
@@ -1252,7 +1254,14 @@ erase_transients() ->
     if I == undefined ->
             ok;
        is_list(I) ->
+	    Proxy = get(request_proxy_ip_port),
             erase(),
+	    case Proxy of
+		undefined ->
+		    ok;
+		_ ->
+		    put(request_proxy_ip_port, Proxy)
+	    end,
             %% Need to keep init_db in case we do not enter aloop (i.e. init:db)
             %% again as R12B-5 requires proc_lib keys in dict while exiting...
             put(init_db, I),
