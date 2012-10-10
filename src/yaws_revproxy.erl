@@ -518,8 +518,10 @@ recv_blocks(YawsPid, #arg{state=RPState}=Arg, BlockCnt, BlockSz, LastBlock) ->
         {ok, Data} ->
             ?Debug("Response content received from the backend server : "
                    "~p bytes~n", [size(Data)]),
-            ok = yaws_api:stream_process_deliver(Arg#arg.clisock, Data),
-            recv_blocks(YawsPid, Arg, BlockCnt-1, BlockSz, LastBlock);
+            case yaws_api:stream_process_deliver(Arg#arg.clisock, Data) of
+		ok -> recv_blocks(YawsPid, Arg, BlockCnt-1, BlockSz, LastBlock);
+		_ -> close(RPState)
+	    end;
         {error, Reason} ->
             ?Debug("TCP error: ~p~n", [Reason]),
             yaws_api:stream_process_end(closed, YawsPid),
