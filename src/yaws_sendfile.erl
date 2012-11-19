@@ -19,6 +19,13 @@
 -endif.
 -endif.
 
+-ifdef(HAVE_YAWS_SENDFILE)
+-define(HAVE_SENDFILE, 1).
+-endif
+
+-ifdef(HAVE_YAWS_SENDFILE)
+-define(HAVE_SENDFILE, 1).
+-endif
 
 -ifdef(HAVE_YAWS_SENDFILE).
 -behavior(gen_server).
@@ -30,6 +37,8 @@ send(Out, Filename) ->
     send(Out, Filename, 0, all).
 send(Out, Filename, Offset) ->
     send(Out, Filename, Offset, all).
+
+-ifdef(HAVE_SENDFILE).
 
 bytes_to_transfer(Filename, Offset, Count) ->
     case Count of
@@ -45,6 +54,8 @@ bytes_to_transfer(Filename, Offset, Count) ->
         _ ->
             {error, badarg}
     end.
+
+-endif.
 
 -ifdef(HAVE_FILE_SENDFILE). %% OTP > R15B; use file:sendfile/5
 
