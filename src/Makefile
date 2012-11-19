@@ -86,11 +86,9 @@ yaws_configure.hrl:	 ../vsn.mk ../include.mk
 	rm -f yaws_configure.hrl
 	touch yaws_configure.hrl
 	if [  $(HAVE_YAWS_SENDFILE) = "true" ]; then \
-		echo "-define(HAVE_YAWS_SENDFILE, true)." >> yaws_configure.hrl;
-	fi
+		echo "-define(HAVE_YAWS_SENDFILE, true)." >> yaws_configure.hrl; fi
 	if [  $(NO_FILE_SENDFILE) = "true" ]; then \
-		echo "-define(NO_FILE_SENDFILE, true)." >> yaws_configure.hrl;
-	fi
+		echo "-define(NO_FILE_SENDFILE, true)." >> yaws_configure.hrl; fi
 
 
 ## need to differentiate between local install and not
