@@ -19,13 +19,13 @@
 -endif.
 -endif.
 
--ifdef(HAVE_YAWS_SENDFILE)
+-ifdef(HAVE_YAWS_SENDFILE).
 -define(HAVE_SENDFILE, 1).
--endif
+-endif.
 
--ifdef(HAVE_YAWS_SENDFILE)
+-ifdef(HAVE_YAWS_SENDFILE).
 -define(HAVE_SENDFILE, 1).
--endif
+-endif.
 
 -ifdef(HAVE_YAWS_SENDFILE).
 -behavior(gen_server).
