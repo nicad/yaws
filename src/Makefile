@@ -83,7 +83,7 @@ yaws_generated.erl:	yaws_generated.template ../vsn.mk
 	    ../scripts/gen-yaws-generated true > yaws_generated.erl
 
 yaws_configure.hrl:	 ../vsn.mk ../include.mk
-	rm yaws_configure.hrl
+	rm -f yaws_configure.hrl
 	touch yaws_configure.hrl
 	if [  $(HAVE_YAWS_SENDFILE) = "true" ]; then \
 		echo "-define(HAVE_YAWS_SENDFILE, true)." >> yaws_configure.hrl;
