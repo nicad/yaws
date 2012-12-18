@@ -99,36 +99,55 @@ open_log(ServerName, Type, Dir) ->
     A = filename:join([Dir, FileName ++ "." ++ atom_to_list(Type)]),
     case file:open(A, [write, raw, append]) of
         {ok, Fd} ->
-            {true, {Fd, A}};
+            Inode = case file:read_file_info(A) of
+                {ok, FI} -> FI#file_info.inode;
+                _ -> undefined
+            end,
+            {true, {Fd, A, Inode}};
         _Err ->
             error_logger:format("Cannot open ~p",[A]),
             false
     end.
 
-close_log(_ServerName, _Type, {Fd, _FileName}) ->
+
+close_log(ServerName, Type, {Fd, FileName}) ->
+    close_log(ServerName, Type, {Fd, FileName, undefined});
+close_log(_ServerName, _Type, {Fd, _FileName, _Inode}) ->
     file:close(Fd).
 
-wrap_log(_ServerName, _Type, {Fd, FileName}, LogWrapSize) ->
-    case wrap_p(FileName, LogWrapSize) of
+wrap_log(ServerName, Type, {Fd, FileName}, LogWrapSize) ->
+    wrap_log(ServerName, Type, {Fd, FileName, undefined}, LogWrapSize);
+wrap_log(_ServerName, _Type, {Fd, FileName, Inode}, LogWrapSize) ->
+    case wrap_p(FileName, LogWrapSize, Inode) of
         true ->
             file:close(Fd),
             Old = [FileName, ".old"],
             file:delete(Old),
             file:rename(FileName, Old),
             {ok, Fd2} = file:open(FileName, [write, raw]),
-            {Fd2, FileName};
+            Inode2 = case file:read_file_info(FileName) of
+                {ok, FI} -> FI#file_info.inode;
+                _ -> undefined
+            end,
+            {Fd2, FileName, Inode2};
         false ->
-            {Fd, FileName};
+            {Fd, FileName, Inode};
         enoent ->
             %% Logfile disappeared,
             error_logger:format("Logfile ~p disappeared - we reopen it",
                                 [FileName]),
             file:close(Fd),
             {ok, Fd2} = file:open(FileName, [write, raw]),
-            {Fd2, FileName}
+            Inode2 = case file:read_file_info(FileName) of
+                {ok, FI} -> FI#file_info.inode;
+                _ -> undefined
+            end,
+            {Fd2, FileName, Inode2}
     end.
 
-write_log(ServerName, Type, {Fd, _FileName}, Infos) ->
+write_log(ServerName, Type, {Fd, FileName}, Infos) ->
+    write_log(ServerName, Type, {Fd, FileName, undefined}, Infos);
+write_log(ServerName, Type, {Fd, _FileName, _Inode}, Infos) ->
     gen_server:cast(yaws_log, {ServerName, Type, Fd, Infos}).
 
 %%%----------------------------------------------------------------------
@@ -377,11 +396,11 @@ handle_info({'EXIT', _, _}, State) ->
 
 
 
-wrap_p(Filename, LogWrapSize) ->
+wrap_p(Filename, LogWrapSize, Inode) ->
     case file:read_file_info(Filename) of
         {ok, FI} when FI#file_info.size > LogWrapSize, LogWrapSize > 0 ->
             true;
-        {ok, FI} when FI#file_info.size == 0, LogWrapSize == 0 -> %% rotate and re-created
+        {ok, FI} when FI#file_info.inode /= Inode -> %% rotated and re-created
             enoent;
         {ok, _FI} ->
             false;
