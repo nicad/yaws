@@ -22,6 +22,12 @@
          parse_multipart/2, parse_multipart/3]).
 -export([code_to_phrase/1, ssi/2, redirect/1]).
 -export([setcookie/2, setcookie/3, setcookie/4, setcookie/5, setcookie/6]).
+-deprecated([{setcookie, 2, eventually},
+             {setcookie, 3, eventually},
+             {setcookie, 4, eventually},
+             {setcookie, 5, eventually},
+             {setcookie, 6, eventually}]).
+-export([set_cookie/3]).
 -export([pre_ssi_files/2,  pre_ssi_string/1, pre_ssi_string/2,
          set_content_type/1,
          htmlize/1, htmlize_char/1, f/2, fl/1]).
@@ -32,7 +38,7 @@
 -export([is_absolute_URI/1]).
 -export([path_norm/1, path_norm_reverse/1,
          sanitize_file_name/1]).
--export([get_line/1, mime_type/1]).
+-export([get_line/1, mime_type/1, mime_type/2]).
 -export([stream_chunk_deliver/2, stream_chunk_deliver_blocking/2,
          stream_chunk_end/1]).
 -export([stream_process_deliver/2, stream_process_deliver_chunk/2,
@@ -49,7 +55,7 @@
          embedded_start_conf/1, embedded_start_conf/2,
          embedded_start_conf/3, embedded_start_conf/4]).
 
--export([set_status_code/1, reformat_header/1,
+-export([set_status_code/1, reformat_header/1, reformat_header/2,
          reformat_request/1, reformat_response/1, reformat_url/1]).
 
 -export([set_trace/1,
@@ -297,6 +303,8 @@ parse_arg_key([C|Line], Key, Value) ->
 
 parse_arg_value([], Key, Value, _, _) ->
     make_parse_line_reply(Key, Value, []);
+parse_arg_value([$\\,$"], Key, Value, _, _) ->
+    make_parse_line_reply(Key, [$\\|Value], []);
 parse_arg_value([$\\,$"|Line], Key, Value, Quote, Begun) ->
     parse_arg_value(Line, Key, [$"|Value], Quote, Begun);
 parse_arg_value([$"|Line], Key, Value, false, _) ->
@@ -520,6 +528,7 @@ do_parse_spec(QueryList, Last, Cur, State) when is_list(QueryList) ->
 
 code_to_phrase(100) -> "Continue";
 code_to_phrase(101) -> "Switching Protocols ";
+code_to_phrase(102) -> "Processing";
 code_to_phrase(200) -> "OK";
 code_to_phrase(201) -> "Created";
 code_to_phrase(202) -> "Accepted";
@@ -527,7 +536,9 @@ code_to_phrase(203) -> "Non-Authoritative Information";
 code_to_phrase(204) -> "No Content";
 code_to_phrase(205) -> "Reset Content";
 code_to_phrase(206) -> "Partial Content";
-code_to_phrase(207) -> "Multi Status";
+code_to_phrase(207) -> "Multi-Status";
+code_to_phrase(208) -> "Already Reported";
+code_to_phrase(226) -> "IM Used";
 code_to_phrase(300) -> "Multiple Choices";
 code_to_phrase(301) -> "Moved Permanently";
 code_to_phrase(302) -> "Found";
@@ -536,6 +547,7 @@ code_to_phrase(304) -> "Not Modified";
 code_to_phrase(305) -> "Use Proxy";
 code_to_phrase(306) -> "(Unused)";
 code_to_phrase(307) -> "Temporary Redirect";
+code_to_phrase(308) -> "Permanent Redirect";
 code_to_phrase(400) -> "Bad Request";
 code_to_phrase(401) -> "Unauthorized";
 code_to_phrase(402) -> "Payment Required";
@@ -554,6 +566,13 @@ code_to_phrase(414) -> "Request-URI Too Long";
 code_to_phrase(415) -> "Unsupported Media Type";
 code_to_phrase(416) -> "Requested Range Not Satisfiable";
 code_to_phrase(417) -> "Expectation Failed";
+code_to_phrase(418) -> "I'm a teapot";
+code_to_phrase(420) -> "Enhance Your Calm";
+code_to_phrase(422) -> "Unprocessable Entity";
+code_to_phrase(423) -> "Locked";
+code_to_phrase(424) -> "Failed Dependency";
+code_to_phrase(425) -> "Unordered Collection";
+code_to_phrase(426) -> "Upgrade Required";
 code_to_phrase(428) -> "Precondition Required";
 code_to_phrase(429) -> "Too Many Requests";
 code_to_phrase(431) -> "Request Header Fields Too Large";
@@ -563,6 +582,10 @@ code_to_phrase(502) -> "Bad Gateway";
 code_to_phrase(503) -> "Service Unavailable";
 code_to_phrase(504) -> "Gateway Timeout";
 code_to_phrase(505) -> "HTTP Version Not Supported";
+code_to_phrase(506) -> "Variant Also Negotiates";
+code_to_phrase(507) -> "Insufficient Storage";
+code_to_phrase(508) -> "Loop Detected";
+code_to_phrase(510) -> "Not Extended";
 code_to_phrase(511) -> "Network Authentication Required";
 
 %% Below are some non-HTTP status codes from other protocol standards that
@@ -668,7 +691,37 @@ secs() ->
     {MS, S, _} = now(),
     (MS * 1000000) + S.
 
+cookie_option(secure) ->
+    "; Secure";
+cookie_option(http_only) ->
+    "; HttpOnly";
+cookie_option(I) ->
+    throw({badarg, I}).
+cookie_option(expires, UTC) when is_tuple(UTC) ->
+    ["; Expires=" | yaws:universal_time_as_string(UTC)];
+cookie_option(max_age, Age) when is_integer(Age) ->
+    V = if Age < 0 -> "0"; true -> integer_to_list(Age) end,
+    ["; Max-Age=" | V];
+cookie_option(path, Path) when is_list(Path), Path =/= [] ->
+    ["; Path=" | Path];
+cookie_option(domain, Domain) when is_list(Domain), Domain =/= [] ->
+    ["; Domain=" | Domain];
+cookie_option(comment, Comment) when is_list(Comment), Comment=/= [] ->
+    ["; Comment=" | Comment];
+cookie_option(I, _) ->
+    throw({badarg, I}).
 
+%% @doc Generate a set_cookie header field tuple.
+%%      This function is more RFC6265 compliant than setcookie/6 and
+%%      therefore it deprecates setcookie/6 completely.
+set_cookie(Key, Value, Options)
+        when is_list(Key), is_list(Value), is_list(Options) ->
+    %% RFC6265 (4.1.1): Name=Value options must come first.
+    {NV,SV} = lists:foldl(fun
+        ({N,V}, {L1, L2}) -> {[cookie_option(N,V) | L1], L2};
+        (N,     {L1, L2}) -> {L1, [cookie_option(N) | L2]}
+    end, {[], []}, Options),
+    {header, {set_cookie, [Key, $=, Value, "; Version=1", NV | SV]}}.
 
 setcookie(Name, Value) ->
     {header, {set_cookie, f("~s=~s;", [Name, Value])}}.
@@ -785,6 +838,8 @@ url_decode_q_split([], Ack) ->
 
 
 
+url_encode([H|T]) when is_list(H) ->
+    [url_encode(H) | url_encode(T)];
 url_encode([H|T]) ->
     if
         H >= $a, $z >= H ->
@@ -837,11 +892,12 @@ get_line([], _) ->
 
 
 mime_type(FileName) ->
+    mime_type(get(sc), FileName).
+
+mime_type(S, FileName) ->
     case filename:extension(FileName) of
-        [_|T] ->
-            element(2, mime_types:t(T));
-        [] ->
-            element(2, mime_types:t([]))
+        [_|T] -> element(2, mime_types:t(S, T));
+        []    -> element(2, mime_types:t(S, []))
     end.
 
 
@@ -990,8 +1046,13 @@ set_status_code(Code) ->
 
 %% returns [ Header1, Header2 .....]
 reformat_header(H) ->
+    FormatFun = fun(Hname, Str) ->
+                        lists:flatten(io_lib:format("~s: ~s",[Hname, Str]))
+                end,
+    reformat_header(H, FormatFun).
+reformat_header(H, FormatFun) ->
     lists:zf(fun({Hname, Str}) ->
-                     I =  lists:flatten(io_lib:format("~s: ~s",[Hname, Str])),
+                     I =  FormatFun(Hname, Str),
                      {true, I};
                 (undefined) ->
                      false
@@ -1111,7 +1172,7 @@ reformat_header(H) ->
             ) ++
         lists:map(
           fun({http_header,_,K,_,V}) ->
-                  lists:flatten(io_lib:format("~s: ~s",[K,V]))
+                  FormatFun(K,V)
           end, H#headers.other).
 
 

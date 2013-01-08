@@ -51,6 +51,7 @@ Mikael Karlsson
 Bengt Kleberg
 Petter Larsson
 James Lee
+Ahti Legonkov
 Peter Lemenkov
 Michael Leonhard
 Eric Liang
@@ -98,6 +99,7 @@ Brian Templeton
 Nicolas Thauvin
 Fredrik Thulin
 Torbjörn Törnqvist
+Tjeerd van der Laan
 Steve Vinoski
 Lev Walkin
 wde
@@ -112,3 +114,5 @@ Ulf Wiger
 Garret Smith
 Nicolas Adiba
 Kalle Zetterlund
+Tjeerd van der Laan
+Kaloyan Dimitrov

@@ -33,6 +33,7 @@ MODULES=yaws \
 	yaws_cgi \
 	yaws_zlib \
 	yaws_generated \
+	mime_type_c \
 	mime_types \
 	yaws_session_server \
 	yaws_outmod \
@@ -41,6 +42,7 @@ MODULES=yaws \
 	yaws_log_file_h \
 	yaws_rss \
 	yaws_dav \
+	yaws_davlock \
 	yaws_pam \
 	json json2 jsonrpc yaws_jsonrpc yaws_xmlrpc\
 	haxe yaws_rpc \
@@ -67,7 +69,6 @@ ERLC_FLAGS+=-Werror $(DEBUG_FLAGS) -pa ../../yaws -I ../include
 #
 # Targets
 #
-
 all: yaws_generated.erl yaws_configure.hrl $(EBIN_FILES)
 
 dav:
@@ -78,41 +79,26 @@ $(EBIN_FILES) : ../include/yaws.hrl ../include/yaws_api.hrl
 ../ebin/yaws_sendfile.$(EMULATOR): yaws_configure.hrl
 
 yaws_generated.erl:	yaws_generated.template ../vsn.mk
-	. ../vsn.mk ; \
-	YAWS_VSN='$(YAWS_VSN)' VARDIR='$(VARDIR)' ETCDIR='$(ETCDIR)' \
-	    ../scripts/gen-yaws-generated true > yaws_generated.erl
+	$(MAKE) IS_LOCAL_INSTALL=true gen_yaws_generated
 
 yaws_configure.hrl:	 ../vsn.mk ../include.mk
 	if [  $(HAVE_YAWS_SENDFILE) = "true" ]; then \
 		echo "-define(HAVE_YAWS_SENDFILE, true)." > yaws_configure.hrl; \
 	else touch yaws_configure.hrl; fi
 
+mime_types.erl: ../priv/charset.def ../priv/mime.types \
+				../ebin/yaws_generated.$(EMULATOR) ../ebin/mime_type_c.$(EMULATOR)
+	$(ERL) -noshell -pa ../ebin -s mime_type_c generate
 
-## need to differentiate between local install and not
-.PHONY: regen
-regen:
-	. ../vsn.mk ; \
-	YAWS_VSN='$(YAWS_VSN)' VARDIR='$(VARDIR)' ETCDIR='$(ETCDIR)' \
-	    ../scripts/gen-yaws-generated false > yaws_generated.erl
-
-charset.def:
-	if [ -n "$(DEFAULT_CHARSET)" ]; then \
-           echo $(DEFAULT_CHARSET) > charset.def; \
-	else rm -f charset.def ; touch charset.def; fi
-
-mime_type_c.beam: mime_type_c.erl
-
-mime_types.erl:	mime.types charset.def mime_type_c.beam
-	$(ERL) -noshell -pa ../ebin -s mime_type_c compile
 
 debug:
 	$(MAKE) TYPE=debug
 
 clean:
-	rm -f $(EBIN_FILES) yaws_generated.erl charset.def \
-		mime_types.erl yaws_configure.hrl mime_type_c.beam
+	rm -f $(EBIN_FILES) yaws_generated.erl yaws_configure.hrl mime_types.erl
 
-install: regen all docsinstall
+install: all docsinstall
+	$(MAKE) IS_LOCAL_INSTALL=false gen_yaws_generated
 	$(INSTALL) -d $(DESTDIR)$(LIBDIR)/yaws/examples/ebin
 	$(INSTALL) -d $(DESTDIR)$(LIBDIR)/yaws/examples/include
 	$(INSTALL) -d $(DESTDIR)$(LIBDIR)/yaws/ebin
@@ -122,6 +108,8 @@ install: regen all docsinstall
 	(cd ..; tar cf - ebin ) | (cd $(DESTDIR)$(LIBDIR)/yaws; tar xf - )
 	(cd ..; tar cf - include ) | (cd $(DESTDIR)$(LIBDIR)/yaws; tar xf - )
 	(cd ..; tar cf - priv/*.xsd ) | (cd $(DESTDIR)$(LIBDIR)/yaws; tar xf - )
+	$(INSTALL) -m 644 ../priv/mime.types  $(DESTDIR)$(LIBDIR)/yaws/priv
+	$(MAKE) IS_LOCAL_INSTALL=true gen_yaws_generated
 
 docsinstall:
 	$(INSTALL) -d $(DESTDIR)$(VARDIR)/yaws/www
@@ -133,4 +121,12 @@ tags:
 xref:
 	erl -noshell -pa ../ebin -s yaws_debug xref ../ebin
 
+
+
+## need to differentiate between local install and not
+gen_yaws_generated:
+	rm -f yaws_generated.erl ../ebin/yaws_generated.$(EMULATOR)
+	YAWS_VSN='$(YAWS_VSN)' VARDIR='$(VARDIR)' ETCDIR='$(ETCDIR)' \
+	    ../scripts/gen-yaws-generated $(IS_LOCAL_INSTALL) > yaws_generated.erl
+	$(MAKE) ../ebin/yaws_generated.$(EMULATOR)
 

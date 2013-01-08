@@ -17,21 +17,76 @@
 -export([start_embedded/1, start_embedded/2, start_embedded/3, start_embedded/4,
          add_server/2, create_gconf/2, create_sconf/2]).
 
+-export([gconf_yaws_dir/1, gconf_trace/1, gconf_flags/1, gconf_logdir/1,
+         gconf_ebin_dir/1, gconf_runmods/1, gconf_keepalive_timeout/1,
+         gconf_keepalive_maxuses/1, gconf_max_num_cached_files/1,
+         gconf_max_num_cached_bytes/1, gconf_max_size_cached_file/1,
+         gconf_max_connections/1, gconf_process_options/1,
+         gconf_large_file_chunk_size/1, gconf_mnesia_dir/1,
+         gconf_log_wrap_size/1, gconf_cache_refresh_secs/1, gconf_include_dir/1,
+         gconf_phpexe/1, gconf_yaws/1, gconf_id/1, gconf_enable_soap/1,
+         gconf_soap_srv_mods/1, gconf_ysession_mod/1,
+         gconf_acceptor_pool_size/1, gconf_mime_types_info/1]).
+
+-export([sconf_port/1, sconf_flags/1, sconf_redirect_map/1, sconf_rhost/1,
+         sconf_rmethod/1, sconf_docroot/1, sconf_xtra_docroots/1,
+         sconf_listen/1, sconf_servername/1, sconf_yaws/1, sconf_ets/1,
+         sconf_ssl/1, sconf_authdirs/1, sconf_patial_post_size/1,
+         sconf_appmods/1, sconf_expires/1, sconf_errormod_401/1,
+         sconf_errormod_404/1, sconf_arg_rewrite_mode/1, sconf_logger_mod/1,
+         sconf_opaque/1, sconf_start_mod/1, sconf_allowed_scripts/1,
+         sconf_tilde_allowed_scripts/1, sconf_index_files/1, sconf_revproxy/1,
+         sconf_spotions/1, sconf_extra_cgi_vars/1, sconf_stats/1,
+         sconf_fcgi_app_server/1, sconf_php_handler/1, sconf_shaper/1,
+         sconf_deflate_options/1, sconf_mime_types_info/1,
+         sconf_dispatch_mod/1]).
+
+-export([new_auth/0,
+         auth_dir/1, auth_dir/2,
+         auth_docroot/1, auth_docroot/2,
+         auth_files/1, auth_files/2,
+         auth_realm/1, auth_realm/2,
+         auth_type/1, auth_type/2,
+         auth_headers/1, auth_headers/2,
+         auth_users/1, auth_users/2,
+         auth_acl/1, auth_acl/2,
+         auth_mod/1, auth_mod/2,
+         auth_outmod/1, auth_outmod/2,
+         auth_pam/1, auth_pam/2]).
+
 -export([new_ssl/0,
          ssl_keyfile/1, ssl_keyfile/2,
          ssl_certfile/1, ssl_certfile/2,
          ssl_verify/1, ssl_verify/2,
+         ssl_fail_if_no_peer_cert/1, ssl_fail_if_no_peer_cert/2,
          ssl_depth/1, ssl_depth/2,
          ssl_password/1, ssl_password/2,
          ssl_cacertfile/1, ssl_cacertfile/2,
          ssl_ciphers/1, ssl_ciphers/2,
          ssl_cachetimeout/1, ssl_cachetimeout/2]).
 
+-export([new_deflate/0,
+         deflate_min_compress_size/1, deflate_min_compress_size/2,
+         deflate_compression_level/1, deflate_compression_level/2,
+         deflate_window_size/1, deflate_window_size/2,
+         deflate_mem_level/1, deflate_mem_level/2,
+         deflate_strategy/1, deflate_strategy/2,
+         deflate_use_gzip_static/1, deflate_use_gzip_static/2,
+         deflate_mime_types/1, deflate_mime_types/2]).
+
+-export([new_mime_types_info/0,
+         mime_types_info_mime_types_file/1, mime_types_info_mime_types_file/2,
+         mime_types_info_types/1, mime_types_info_types/2,
+         mime_types_info_charsets/1, mime_types_info_charsets/2,
+         mime_types_info_default_type/1, mime_types_info_default_type/2,
+         mime_types_info_default_charset/1, mime_types_info_default_charset/2]).
+
 -export([first/2, elog/2, filesize/1, upto/2, to_string/1, to_list/1,
          integer_to_hex/1, hex_to_integer/1, string_to_hex/1, hex_to_string/1,
          is_modified_p/2, flag/3, dohup/1, is_ssl/1, address/0, is_space/1,
-         setopts/3, eat_crnl/2, get_chunk_num/2, get_chunk/4, list_to_uue/1,
-         uue_to_list/1, printversion/0, strip_spaces/1, strip_spaces/2,
+         setopts/3, eat_crnl/2, get_chunk_num/2, get_chunk_header/2,
+         get_chunk/4, get_chunk_trailer/2, list_to_uue/1, uue_to_list/1,
+         printversion/0, strip_spaces/1, strip_spaces/2,
          month/1, mk2/1, home/0, arg_rewrite/1, to_lowerchar/1, to_lower/1,
          funreverse/2, is_prefix/2, split_sep/2, join_sep/2, accepts_gzip/2,
          upto_char/2, deepmap/2, ticker/2, ticker/3,
@@ -50,6 +105,7 @@
          outh_set_dcc/2,
          outh_set_transfer_encoding_off/0,
          outh_set_auth/1,
+         outh_set_vary/1,
          outh_clear_headers/0,
          outh_fix_doclose/0,
          dcc/2]).
@@ -67,7 +123,8 @@
          make_www_authenticate_header/1,
          make_etag/1,
          make_content_type_header/1,
-         make_date_header/0]).
+         make_date_header/0,
+         make_vary_header/1]).
 
 -export([outh_get_status_code/0,
          outh_get_contlen/0,
@@ -78,6 +135,7 @@
          outh_get_content_encoding/0,
          outh_get_content_encoding_header/0,
          outh_get_content_type/0,
+         outh_get_vary_fields/0,
          outh_serialize/0]).
 
 -export([accumulate_header/1, headers_to_str/1,
@@ -97,6 +155,14 @@
          tmpdir/0, tmpdir/1, mktemp/1, split_at/2,
          id_dir/1, ctl_file/1]).
 
+-export([parse_ipmask/1, match_ipmask/2]).
+
+-export([get_app_dir/0, get_ebin_dir/0, get_priv_dir/0,
+         get_inc_dir/0, get_src_dir/0]).
+
+%% Internal
+-export([local_time_as_gmt_string/1, universal_time_as_string/1,
+         stringdate_to_datetime/1]).
 
 start() ->
     application:start(yaws, permanent).
@@ -121,8 +187,7 @@ start_embedded(DocRoot, SL, GL, Id)
     {ok, SCList, GC, _} = yaws_api:embedded_start_conf(DocRoot, SL, GL, Id),
     ok = application:start(yaws),
     yaws_config:add_yaws_soap_srv(GC),
-    SCs = [yaws_config:add_yaws_auth(X) || X <- SCList],
-    yaws_api:setconf(GC, SCs),
+    yaws_api:setconf(GC, SCList),
     ok.
 
 add_server(DocRoot, SL) when is_list(DocRoot),is_list(SL) ->
@@ -133,35 +198,270 @@ add_server(DocRoot, SL) when is_list(DocRoot),is_list(SL) ->
               (A, Acc)                      -> [A| Acc]
           end,
     Authdirs = lists:foldr(Fun, [], SC#sconf.authdirs),
-    yaws_config:add_sconf(SC#sconf{authdirs = Authdirs}).
+    SC1 = yaws_config:add_yaws_auth(SC#sconf{authdirs = Authdirs}),
+    yaws_config:add_sconf(SC1).
 
 create_gconf(GL, Id) when is_list(GL) ->
     setup_gconf(GL, yaws_config:make_default_gconf(false, Id)).
 
 create_sconf(DocRoot, SL) when is_list(DocRoot), is_list(SL) ->
-    setup_sconf(DocRoot, #sconf{}, SL).
+    SC = yaws_config:make_default_sconf(DocRoot, lkup(port, SL, undefined)),
+    setup_sconf(SL, SC).
 
 
-%%% Access functions for the SSL record.
+
+%% Access functions for the GCONF and SCONF records.
+gconf_yaws_dir             (#gconf{yaws_dir              = X}) -> X.
+gconf_trace                (#gconf{trace                 = X}) -> X.
+gconf_flags                (#gconf{flags                 = X}) -> X.
+gconf_logdir               (#gconf{logdir                = X}) -> X.
+gconf_ebin_dir             (#gconf{ebin_dir              = X}) -> X.
+gconf_runmods              (#gconf{runmods               = X}) -> X.
+gconf_keepalive_timeout    (#gconf{keepalive_timeout     = X}) -> X.
+gconf_keepalive_maxuses    (#gconf{keepalive_maxuses     = X}) -> X.
+gconf_max_num_cached_files (#gconf{max_num_cached_files  = X}) -> X.
+gconf_max_num_cached_bytes (#gconf{max_num_cached_bytes  = X}) -> X.
+gconf_max_size_cached_file (#gconf{max_size_cached_file  = X}) -> X.
+gconf_max_connections      (#gconf{max_connections       = X}) -> X.
+gconf_process_options      (#gconf{process_options       = X}) -> X.
+gconf_large_file_chunk_size(#gconf{large_file_chunk_size = X}) -> X.
+gconf_mnesia_dir           (#gconf{mnesia_dir            = X}) -> X.
+gconf_log_wrap_size        (#gconf{log_wrap_size         = X}) -> X.
+gconf_cache_refresh_secs   (#gconf{cache_refresh_secs    = X}) -> X.
+gconf_include_dir          (#gconf{include_dir           = X}) -> X.
+gconf_phpexe               (#gconf{phpexe                = X}) -> X.
+gconf_yaws                 (#gconf{yaws                  = X}) -> X.
+gconf_id                   (#gconf{id                    = X}) -> X.
+gconf_enable_soap          (#gconf{enable_soap           = X}) -> X.
+gconf_soap_srv_mods        (#gconf{soap_srv_mods         = X}) -> X.
+gconf_ysession_mod         (#gconf{ysession_mod          = X}) -> X.
+gconf_acceptor_pool_size   (#gconf{acceptor_pool_size    = X}) -> X.
+gconf_mime_types_info      (#gconf{mime_types_info       = X}) -> X.
+
+
+sconf_port                 (#sconf{port                  = X}) -> X.
+sconf_flags                (#sconf{flags                 = X}) -> X.
+sconf_redirect_map         (#sconf{redirect_map          = X}) -> X.
+sconf_rhost                (#sconf{rhost                 = X}) -> X.
+sconf_rmethod              (#sconf{rmethod               = X}) -> X.
+sconf_docroot              (#sconf{docroot               = X}) -> X.
+sconf_xtra_docroots        (#sconf{xtra_docroots         = X}) -> X.
+sconf_listen               (#sconf{listen                = X}) -> X.
+sconf_servername           (#sconf{servername            = X}) -> X.
+sconf_yaws                 (#sconf{yaws                  = X}) -> X.
+sconf_ets                  (#sconf{ets                   = X}) -> X.
+sconf_ssl                  (#sconf{ssl                   = X}) -> X.
+sconf_authdirs             (#sconf{authdirs              = X}) -> X.
+sconf_patial_post_size     (#sconf{partial_post_size     = X}) -> X.
+sconf_appmods              (#sconf{appmods               = X}) -> X.
+sconf_expires              (#sconf{expires               = X}) -> X.
+sconf_errormod_401         (#sconf{errormod_401          = X}) -> X.
+sconf_errormod_404         (#sconf{errormod_404          = X}) -> X.
+sconf_arg_rewrite_mode     (#sconf{arg_rewrite_mod       = X}) -> X.
+sconf_logger_mod           (#sconf{logger_mod            = X}) -> X.
+sconf_opaque               (#sconf{opaque                = X}) -> X.
+sconf_start_mod            (#sconf{start_mod             = X}) -> X.
+sconf_allowed_scripts      (#sconf{allowed_scripts       = X}) -> X.
+sconf_tilde_allowed_scripts(#sconf{tilde_allowed_scripts = X}) -> X.
+sconf_index_files          (#sconf{index_files           = X}) -> X.
+sconf_revproxy             (#sconf{revproxy              = X}) -> X.
+sconf_spotions             (#sconf{soptions              = X}) -> X.
+sconf_extra_cgi_vars       (#sconf{extra_cgi_vars        = X}) -> X.
+sconf_stats                (#sconf{stats                 = X}) -> X.
+sconf_fcgi_app_server      (#sconf{fcgi_app_server       = X}) -> X.
+sconf_php_handler          (#sconf{php_handler           = X}) -> X.
+sconf_shaper               (#sconf{shaper                = X}) -> X.
+sconf_deflate_options      (#sconf{deflate_options       = X}) -> X.
+sconf_mime_types_info      (#sconf{mime_types_info       = X}) -> X.
+sconf_dispatch_mod         (#sconf{dispatch_mod          = X}) -> X.
+
+
+%% Access functions for the AUTH record.
+new_auth() -> #auth{}.
+
+auth_dir    (#auth{dir     = X}) -> X.
+auth_docroot(#auth{docroot = X}) -> X.
+auth_files  (#auth{files   = X}) -> X.
+auth_realm  (#auth{realm   = X}) -> X.
+auth_type   (#auth{type    = X}) -> X.
+auth_headers(#auth{headers = X}) -> X.
+auth_users  (#auth{users   = X}) -> X.
+auth_acl    (#auth{acl     = X}) -> X.
+auth_mod    (#auth{mod     = X}) -> X.
+auth_outmod (#auth{outmod  = X}) -> X.
+auth_pam    (#auth{pam     = X}) -> X.
+
+auth_dir    (A, Dir)     -> A#auth{dir     = Dir}.
+auth_docroot(A, DocRoot) -> A#auth{docroot = DocRoot}.
+auth_files  (A, Files)   -> A#auth{files   = Files}.
+auth_realm  (A, Realm)   -> A#auth{realm   = Realm}.
+auth_type   (A, Type)    -> A#auth{type    = Type}.
+auth_headers(A, Headers) -> A#auth{headers = Headers}.
+auth_users  (A, Users)   -> A#auth{users   = Users}.
+auth_acl    (A, Acl)     -> A#auth{acl     = Acl}.
+auth_mod    (A, Mod)     -> A#auth{mod     = Mod}.
+auth_outmod (A, Outmod)  -> A#auth{outmod  = Outmod}.
+auth_pam    (A, Pam)     -> A#auth{pam     = Pam}.
+
+
+setup_authdirs(SL, DefaultAuthDirs) ->
+    case [A || {auth, A} <- SL] of
+        [] -> DefaultAuthDirs;
+        As -> [setup_auth(A) || A <- As]
+    end.
+
+setup_auth(#auth{}=Auth) ->
+    Auth;
+setup_auth(AuthProps) ->
+    Auth = #auth{},
+    #auth{dir     = lkup(dir,     AuthProps, Auth#auth.dir),
+          docroot = lkup(docroot, AuthProps, Auth#auth.docroot),
+          files   = lkup(files,   AuthProps, Auth#auth.files),
+          realm   = lkup(realm,   AuthProps, Auth#auth.realm),
+          type    = lkup(type,    AuthProps, Auth#auth.type),
+          headers = lkup(headers, AuthProps, Auth#auth.headers),
+          users   = lkup(users,   AuthProps, Auth#auth.users),
+          acl     = lkup(acl,     AuthProps, Auth#auth.acl),
+          mod     = lkup(mod,     AuthProps, Auth#auth.mod),
+          outmod  = lkup(outmod,  AuthProps, Auth#auth.outmod),
+          pam     = lkup(pam,     AuthProps, Auth#auth.pam)}.
+
+
+%% Access functions for the SSL record.
 new_ssl() -> #ssl{}.
 
-ssl_keyfile(S)      -> S#ssl.keyfile.
-ssl_certfile(S)     -> S#ssl.certfile.
-ssl_verify(S)       -> S#ssl.verify.
-ssl_depth(S)        -> S#ssl.depth.
-ssl_password(S)     -> S#ssl.password.
-ssl_cacertfile(S)   -> S#ssl.cacertfile.
-ssl_ciphers(S)      -> S#ssl.ciphers.
-ssl_cachetimeout(S) -> S#ssl.cachetimeout.
+ssl_keyfile             (#ssl{keyfile              = X}) -> X.
+ssl_certfile            (#ssl{certfile             = X}) -> X.
+ssl_verify              (#ssl{verify               = X}) -> X.
+ssl_fail_if_no_peer_cert(#ssl{fail_if_no_peer_cert = X}) -> X.
+ssl_depth               (#ssl{depth                = X}) -> X.
+ssl_password            (#ssl{password             = X}) -> X.
+ssl_cacertfile          (#ssl{cacertfile           = X}) -> X.
+ssl_ciphers             (#ssl{ciphers              = X}) -> X.
+ssl_cachetimeout        (#ssl{cachetimeout         = X}) -> X.
 
-ssl_keyfile(S, Keyfile)           -> S#ssl{keyfile  = Keyfile}.
-ssl_certfile(S, Certfile)         -> S#ssl{certfile = Certfile}.
-ssl_verify(S, Verify)             -> S#ssl{verify = Verify}.
-ssl_depth(S, Depth)               -> S#ssl{depth = Depth}.
-ssl_password(S, Password)         -> S#ssl{password = Password}.
-ssl_cacertfile(S, Cacertfile)     -> S#ssl{cacertfile = Cacertfile}.
-ssl_ciphers(S, Ciphers)           -> S#ssl{ciphers = Ciphers}.
-ssl_cachetimeout(S, Cachetimeout) -> S#ssl{cachetimeout = Cachetimeout}.
+ssl_keyfile             (S, File)    -> S#ssl{keyfile              = File}.
+ssl_certfile            (S, File)    -> S#ssl{certfile             = File}.
+ssl_verify              (S, Verify)  -> S#ssl{verify               = Verify}.
+ssl_fail_if_no_peer_cert(S, Bool)    -> S#ssl{fail_if_no_peer_cert = Bool}.
+ssl_depth               (S, Depth)   -> S#ssl{depth                = Depth}.
+ssl_password            (S, Pass)    -> S#ssl{password             = Pass}.
+ssl_cacertfile          (S, File)    -> S#ssl{cacertfile           = File}.
+ssl_ciphers             (S, Ciphers) -> S#ssl{ciphers              = Ciphers}.
+ssl_cachetimeout        (S, Timeout) -> S#ssl{cachetimeout         = Timeout}.
+
+
+setup_ssl(SL, DefaultSSL) ->
+    case lkup(ssl, SL, undefined) of
+        undefined ->
+            DefaultSSL;
+        SSL when is_record(SSL, ssl) ->
+            SSL;
+        SSLProps when is_list(SSLProps) ->
+            SSL = #ssl{},
+            #ssl{keyfile              = lkup(keyfile, SSLProps,
+                                             SSL#ssl.keyfile),
+                 certfile             = lkup(certfile, SSLProps,
+                                             SSL#ssl.certfile),
+                 verify               = lkup(verify, SSLProps, SSL#ssl.verify),
+                 fail_if_no_peer_cert = lkup(fail_if_no_peer_cert, SSLProps,
+                                             SSL#ssl.fail_if_no_peer_cert),
+                 depth                = lkup(depth, SSLProps, SSL#ssl.depth),
+                 password             = lkup(password, SSLProps,
+                                             SSL#ssl.password),
+                 cacertfile           = lkup(cacertfile, SSLProps,
+                                             SSL#ssl.cacertfile),
+                 ciphers              = lkup(ciphers, SSLProps,
+                                             SSL#ssl.ciphers),
+                 cachetimeout         = lkup(cachetimeout, SSLProps,
+                                             SSL#ssl.cachetimeout)}
+    end.
+
+
+%% Access functions for the DEFLATE record.
+new_deflate() -> #deflate{}.
+
+deflate_min_compress_size(#deflate{min_compress_size = X}) -> X.
+deflate_compression_level(#deflate{compression_level = X}) -> X.
+deflate_window_size      (#deflate{window_size       = X}) -> X.
+deflate_mem_level        (#deflate{mem_level         = X}) -> X.
+deflate_strategy         (#deflate{strategy          = X}) -> X.
+deflate_use_gzip_static  (#deflate{use_gzip_static   = X}) -> X.
+deflate_mime_types       (#deflate{mime_types        = X}) -> X.
+
+deflate_min_compress_size(D, Min)   -> D#deflate{min_compress_size = Min}.
+deflate_compression_level(D, Level) -> D#deflate{compression_level = Level}.
+deflate_window_size      (D, Size)  -> D#deflate{window_size       = Size}.
+deflate_mem_level        (D, Level) -> D#deflate{mem_level         = Level}.
+deflate_strategy         (D, Strat) -> D#deflate{strategy          = Strat}.
+deflate_use_gzip_static  (D, Bool)  -> D#deflate{use_gzip_static   = Bool}.
+deflate_mime_types       (D, Types) -> D#deflate{mime_types        = Types}.
+
+
+setup_deflate(SL, DefaultDeflate) ->
+    case lkup(deflate_options, SL, undefined) of
+        undefined ->
+            DefaultDeflate;
+        D when is_record(D, deflate) ->
+            D;
+        DProps when is_list(DProps) ->
+            D = #deflate{},
+            #deflate{min_compress_size = lkup(min_compress_size, DProps,
+                                              D#deflate.min_compress_size),
+                     compression_level = lkup(compression_level, DProps,
+                                              D#deflate.compression_level),
+                     window_size       = lkup(window_size, DProps,
+                                              D#deflate.window_size),
+                     mem_level         = lkup(mem_level, DProps,
+                                              D#deflate.mem_level),
+                     strategy          = lkup(strategy, DProps,
+                                              D#deflate.strategy),
+                     use_gzip_static   = lkup(use_gzip_static, DProps,
+                                              D#deflate.use_gzip_static),
+                     mime_types        = lkup(mime_types, DProps,
+                                              D#deflate.mime_types)}
+    end.
+
+%% Access functions to MIME_TYPES_INFO record.
+new_mime_types_info() -> #mime_types_info{}.
+
+mime_types_info_mime_types_file(#mime_types_info{mime_types_file = X}) -> X.
+mime_types_info_types          (#mime_types_info{types           = X}) -> X.
+mime_types_info_charsets       (#mime_types_info{charsets        = X}) -> X.
+mime_types_info_default_type   (#mime_types_info{default_type    = X}) -> X.
+mime_types_info_default_charset(#mime_types_info{default_charset = X}) -> X.
+
+mime_types_info_mime_types_file(M, File) ->
+    M#mime_types_info{mime_types_file = File}.
+mime_types_info_types(M, Types) ->
+    M#mime_types_info{types = Types}.
+mime_types_info_charsets(M, Charsets) ->
+    M#mime_types_info{charsets = Charsets}.
+mime_types_info_default_type(M, Type) ->
+    M#mime_types_info{default_type = Type}.
+mime_types_info_default_charset(M, Charset) ->
+    M#mime_types_info{default_charset = Charset}.
+
+
+setup_mime_types_info(SL, DefaultMTI) ->
+    case lkup(mime_types_info, SL, undefined) of
+        undefined ->
+            DefaultMTI;
+        M when is_record(M, mime_types_info) ->
+            M;
+        MProps when is_list(MProps) ->
+            M = #mime_types_info{},
+            #mime_types_info{mime_types_file = lkup(mime_types_file, MProps,
+                                                    M#mime_types_info.mime_types_file),
+                             types           = lkup(types, MProps,
+                                                    M#mime_types_info.types),
+                             charsets        = lkup(charsets, MProps,
+                                                    M#mime_types_info.charsets),
+                             default_type    = lkup(default_type, MProps,
+                                                    M#mime_types_info.default_type),
+                             default_charset = lkup(default_charset, MProps,
+                                                    M#mime_types_info.default_charset)}
+    end.
 
 
 %% Setup global configuration
@@ -205,7 +505,10 @@ setup_gconf(GL, GC) ->
            ysession_mod          = lkup(ysession_mod, GL,
                                         GC#gconf.ysession_mod),
            acceptor_pool_size    = lkup(acceptor_pool_size, GL,
-                                        GC#gconf.acceptor_pool_size)
+                                        GC#gconf.acceptor_pool_size),
+           mime_types_info       = setup_mime_types_info(
+                                     GL, GC#gconf.mime_types_info
+                                    )
           }.
 
 set_gc_flags([{tty_trace, Bool}|T], Flags) ->
@@ -233,97 +536,56 @@ set_gc_flags([], Flags) ->
 
 
 %% Setup vhost configuration
-setup_sconf(DocRoot, D, SL) ->
-    #sconf{port                  = lkup(port, SL, D#sconf.port),
+setup_sconf(SL, SC) ->
+    #sconf{port                  = lkup(port, SL, SC#sconf.port),
            flags                 = set_sc_flags(lkup(flags, SL, []),
-                                                D#sconf.flags),
-           redirect_map          = lkup(redirect_map, SL, D#sconf.redirect_map),
-           rhost                 = lkup(rhost, SL, D#sconf.rhost),
-           rmethod               = lkup(rmethod, SL, D#sconf.rmethod),
-           docroot               = case lkup(docroot, SL, D#sconf.docroot) of
-                                       undefined -> DocRoot;
-                                       DR        -> DR
-                                   end,
+                                                SC#sconf.flags),
+           redirect_map          = lkup(redirect_map, SL, SC#sconf.redirect_map),
+           rhost                 = lkup(rhost, SL, SC#sconf.rhost),
+           rmethod               = lkup(rmethod, SL, SC#sconf.rmethod),
+           docroot               = lkup(docroot, SL, SC#sconf.docroot),
            xtra_docroots         = lkup(xtra_docroots, SL,
-                                        D#sconf.xtra_docroots),
-           listen                = lkup(listen, SL, D#sconf.listen),
-           servername            = lkup(servername, SL, D#sconf.servername),
-           yaws                  = lkup(yaws, SL, D#sconf.yaws),
-           ets                   = lkup(ets, SL, D#sconf.ets),
-           ssl                   = setup_sconf_ssl(SL, D#sconf.ssl),
-           authdirs              = lkup(authdirs, expand_auth(SL),
-                                        D#sconf.authdirs),
+                                        SC#sconf.xtra_docroots),
+           listen                = lkup(listen, SL, SC#sconf.listen),
+           servername            = lkup(servername, SL, SC#sconf.servername),
+           yaws                  = lkup(yaws, SL, SC#sconf.yaws),
+           ets                   = lkup(ets, SL, SC#sconf.ets),
+           ssl                   = setup_ssl(SL, SC#sconf.ssl),
+           authdirs              = setup_authdirs(SL, SC#sconf.authdirs),
            partial_post_size     = lkup(partial_post_size, SL,
-                                        D#sconf.partial_post_size),
-           appmods               = lkup(appmods, SL, D#sconf.appmods),
-           expires               = lkup(expires, SL, D#sconf.expires),
-           errormod_401          = lkup(errormod_401, SL, D#sconf.errormod_401),
-           errormod_404          = lkup(errormod_404, SL, D#sconf.errormod_404),
+                                        SC#sconf.partial_post_size),
+           appmods               = lkup(appmods, SL, SC#sconf.appmods),
+           expires               = lkup(expires, SL, SC#sconf.expires),
+           errormod_401          = lkup(errormod_401, SL, SC#sconf.errormod_401),
+           errormod_404          = lkup(errormod_404, SL, SC#sconf.errormod_404),
            errormod_crash        = lkup(errormod_crash, SL,
-                                        D#sconf.errormod_crash),
-	   errormod_conn	 = lkup(errormod_conn, SL, D#sconf.errormod_conn),
+                                        SC#sconf.errormod_crash),
+	   errormod_conn	 = lkup(errormod_conn, SL, SC#sconf.errormod_conn),
            arg_rewrite_mod       = lkup(arg_rewrite_mod, SL,
-                                        D#sconf.arg_rewrite_mod),
-           logger_mod            = lkup(logger_mod, SL, D#sconf.logger_mod),
-           opaque                = lkup(opaque, SL, D#sconf.opaque),
-           start_mod             = lkup(start_mod, SL, D#sconf.start_mod),
+                                        SC#sconf.arg_rewrite_mod),
+           logger_mod            = lkup(logger_mod, SL, SC#sconf.logger_mod),
+           opaque                = lkup(opaque, SL, SC#sconf.opaque),
+           start_mod             = lkup(start_mod, SL, SC#sconf.start_mod),
            allowed_scripts       = lkup(allowed_scripts, SL,
-                                        D#sconf.allowed_scripts),
+                                        SC#sconf.allowed_scripts),
            tilde_allowed_scripts = lkup(tilde_allowed_scripts, SL,
-                                        D#sconf.tilde_allowed_scripts),
-           revproxy              = lkup(revproxy, SL, D#sconf.revproxy),
-           soptions              = lkup(soptions, SL, D#sconf.soptions),
+                                        SC#sconf.tilde_allowed_scripts),
+           index_files           = lkup(index_files, SL, SC#sconf.index_files),
+           revproxy              = lkup(revproxy, SL, SC#sconf.revproxy),
+           soptions              = lkup(soptions, SL, SC#sconf.soptions),
            extra_cgi_vars        = lkup(extra_cgi_vars, SL,
-                                        D#sconf.extra_cgi_vars),
-           stats                 = lkup(stats, SL, D#sconf.stats),
+                                        SC#sconf.extra_cgi_vars),
+           stats                 = lkup(stats, SL, SC#sconf.stats),
            fcgi_app_server       = lkup(fcgi_app_server, SL,
-                                        D#sconf.fcgi_app_server),
-           php_handler           = lkup(php_handler, SL, D#sconf.php_handler),
-           shaper                = lkup(shaper, SL, D#sconf.shaper),
-           deflate_options       = lkup(deflate_options, SL,
-                                        D#sconf.deflate_options)
+                                        SC#sconf.fcgi_app_server),
+           php_handler           = lkup(php_handler, SL, SC#sconf.php_handler),
+           shaper                = lkup(shaper, SL, SC#sconf.shaper),
+           deflate_options       = setup_deflate(SL, SC#sconf.deflate_options),
+           mime_types_info       = setup_mime_types_info(
+                                     SL, SC#sconf.mime_types_info
+                                    ),
+           dispatch_mod          = lkup(dispatchmod, SL, SC#sconf.dispatch_mod)
           }.
-
-expand_auth(SL) ->
-    case [A || {auth, A} <- SL] of
-        [] -> SL;
-        As -> [{authdirs, [opts_to_auth(O) || O <- As]}|SL]
-    end.
-
-opts_to_auth(Opts) ->
-    {_, Auth} =
-        lists:foldl(fun(F, {P,A}) ->
-                            Val = proplists:get_value(F, Opts, element(P,A)),
-                            {P+1, setelement(P, A, Val)}
-                    end, {2, #auth{}}, record_info(fields, auth)),
-    Auth.
-
-setup_sconf_ssl(SL, DefaultSSL) ->
-    case lkup(ssl, SL, undefined) of
-        undefined ->
-            DefaultSSL;
-        SSL when is_record(SSL, ssl) ->
-            SSL;
-        SSLProps when is_list(SSLProps) ->
-            SSL1 = #ssl{
-              keyfile      = proplists:get_value(keyfile, SSLProps),
-              certfile     = proplists:get_value(certfile, SSLProps),
-              password     = proplists:get_value(password, SSLProps),
-              cacertfile   = proplists:get_value(cacertfile, SSLProps),
-              ciphers      = proplists:get_value(ciphers, SSLProps),
-              cachetimeout = proplists:get_value(cachetimeout, SSLProps)
-             },
-            %% Prevent overriding the ssl record's default values!
-            SSL2 =
-                case proplists:get_value(verify, SSLProps) of
-                    undefined -> SSL1;
-                    Verify    -> SSL1#ssl{verify=Verify}
-                end,
-            case proplists:get_value(depth, SSLProps) of
-                undefined -> SSL2;
-                Depth     -> SSL2#ssl{depth=Depth}
-            end
-    end.
 
 set_sc_flags([{access_log, Bool}|T], Flags) ->
     set_sc_flags(T, flag(Flags, ?SC_ACCESS_LOG, Bool));
@@ -345,6 +607,8 @@ set_sc_flags([{dav, Bool}|T], Flags) ->
     set_sc_flags(T, flag(Flags, ?SC_DAV, Bool));
 set_sc_flags([{fcgi_trace_protocol, Bool}|T], Flags) ->
     set_sc_flags(T, flag(Flags, ?SC_FCGI_TRACE_PROTOCOL, Bool));
+set_sc_flags([{fcgi_log_app_error, Bool}|T], Flags) ->
+    set_sc_flags(T, flag(Flags, ?SC_FCGI_LOG_APP_ERROR, Bool));
 set_sc_flags([{forward_proxy, Bool}|T], Flags) ->
     set_sc_flags(T, flag(Flags, ?SC_FORWARD_PROXY, Bool));
 set_sc_flags([{auth_skip_docroot, Bool}|T], Flags) ->
@@ -358,9 +622,9 @@ set_sc_flags([], Flags) ->
     Flags.
 
 lkup(Key, List, Def) ->
-    case lists:keysearch(Key, 1, List) of
-        {value,{_,Value}} -> Value;
-        _                 -> Def
+    case lists:keyfind(Key, 1, List) of
+        {_,Value} -> Value;
+        _         -> Def
     end.
 
 
@@ -420,7 +684,7 @@ upto(I,  [H|T]) -> [H|upto(I-1, T)].
 
 
 to_string(X) when is_float(X)   -> io_lib:format("~.2.0f",[X]);
-to_string(X) when is_integer(X) -> integer_to_list(X);
+to_string(X) when is_integer(X) -> erlang:integer_to_list(X);
 to_string(X) when is_atom(X)    -> atom_to_list(X);
 to_string(X)                    -> lists:concat([X]).
 
@@ -480,11 +744,11 @@ local_time_as_gmt_string(LocalTime) ->
 
 time_to_string({{Year, Month, Day}, {Hour, Min, Sec}}, Zone) ->
     [day(Year, Month, Day), ", ",
-     mk2(Day), " ", month(Month), " ", integer_to_list(Year), " ",
+     mk2(Day), " ", month(Month), " ", erlang:integer_to_list(Year), " ",
      mk2(Hour), ":", mk2(Min), ":", mk2(Sec), " ", Zone].
 
-mk2(I) when I < 10 -> [$0 | integer_to_list(I)];
-mk2(I)             -> integer_to_list(I).
+mk2(I) when I < 10 -> [$0 | erlang:integer_to_list(I)];
+mk2(I)             -> erlang:integer_to_list(I).
 
 day(Year, Month, Day) ->
     int_to_wd(calendar:day_of_the_week(Year, Month, Day)).
@@ -530,18 +794,18 @@ stringdate_to_datetime([_D1, _D2, _D3, $\,, $ |Tail]) ->
     stringdate_to_datetime1(Tail).
 
 stringdate_to_datetime1([A, B, $\s |T]) ->
-    stringdate_to_datetime2(T, list_to_integer([A,B]));
+    stringdate_to_datetime2(T, erlang:list_to_integer([A,B]));
 stringdate_to_datetime1([A, $\s |T]) ->
-    stringdate_to_datetime2(T, list_to_integer([A])).
+    stringdate_to_datetime2(T, erlang:list_to_integer([A])).
 
 stringdate_to_datetime2([M1, M2, M3, $\s , Y1, Y2, Y3, Y4, $\s,
                          H1, H2, $:, Min1, Min2,$:,
                          S1, S2,$\s ,$G, $M, $T|_], Day) ->
-    {{list_to_integer([Y1,Y2,Y3,Y4]),
+    {{erlang:list_to_integer([Y1,Y2,Y3,Y4]),
       month_str_to_int([M1, M2, M3]), Day},
-     {list_to_integer([H1, H2]),
-      list_to_integer([Min1, Min2]),
-      list_to_integer([S1, S2])}}.
+     {erlang:list_to_integer([H1, H2]),
+      erlang:list_to_integer([Min1, Min2]),
+      erlang:list_to_integer([S1, S2])}}.
 
 
 %% used by If-Modified-Since header code
@@ -960,14 +1224,18 @@ outh_set_static_headers(Req, UT, Headers, Range) ->
               all ->
                   case UT#urltype.deflate of
                       DB when is_binary(DB) -> % cached
-                          case accepts_gzip(Headers, UT#urltype.mime) of
+                          %% Remove charset
+                          [Mime|_] = yaws:split_sep(UT#urltype.mime, $;),
+                          case accepts_gzip(Headers, Mime) of
                               true  -> {true, size(DB)};
                               false -> {false, FIL}
                           end;
                       undefined ->
                           {false, FIL};
                       dynamic ->
-                          case accepts_gzip(Headers, UT#urltype.mime) of
+                          %% Remove charset
+                          [Mime|_] = yaws:split_sep(UT#urltype.mime, $;),
+                          case accepts_gzip(Headers, Mime) of
                               true  -> {true, undefined};
                               false -> {false, FIL}
                           end
@@ -1002,11 +1270,6 @@ outh_set_static_headers(Req, UT, Headers, Range) ->
            encoding          = Encoding,
            date              = make_date_header(),
            server            = make_server_header(),
-           last_modified     = make_last_modified_header(UT#urltype.finfo),
-           expires           = make_expires_header(UT#urltype.mime,
-                                                   UT#urltype.finfo),
-           cache_control     = make_cache_control_header(UT#urltype.mime,
-                                                         UT#urltype.finfo),
            etag              = make_etag_header(UT#urltype.finfo),
            content_range     = make_content_range_header(Range),
            content_length    = make_content_length_header(Length),
@@ -1017,6 +1280,9 @@ outh_set_static_headers(Req, UT, Headers, Range) ->
            doclose           = DoClose,
            contlen           = Length
           },
+    %% store finfo to set last_modified, expires and cache_control headers
+    %% during #outh{} serialization.
+    put(file_info, UT#urltype.finfo),
     put(outh, H2).
 
 outh_set_304_headers(Req, UT, Headers) ->
@@ -1027,17 +1293,15 @@ outh_set_304_headers(Req, UT, Headers) ->
            chunked        = false,
            date           = make_date_header(),
            server         = make_server_header(),
-           last_modified  = make_last_modified_header(UT#urltype.finfo),
-           expires        = make_expires_header(UT#urltype.mime,
-                                                UT#urltype.finfo),
-           cache_control  = make_cache_control_header(UT#urltype.mime,
-                                                      UT#urltype.finfo),
            etag           = make_etag_header(UT#urltype.finfo),
            content_length = make_content_length_header(0),
            connection     = make_connection_close_header(DoClose),
            doclose        = DoClose,
            contlen        = 0
           },
+    %% store finfo to set last_modified, expires and cache_control headers
+    %% during #outh{} serialization.
+    put(file_info, UT#urltype.finfo),
     put(outh, H2).
 
 outh_set_dyn_headers(Req, Headers, UT) ->
@@ -1049,14 +1313,12 @@ outh_set_dyn_headers(Req, Headers, UT) ->
            server            = make_server_header(),
            connection        = make_connection_close_header(DoClose),
            content_type      = make_content_type_header(UT#urltype.mime),
-           expires           = make_expires_header(UT#urltype.mime,
-                                                   UT#urltype.finfo),
-           cache_control     = make_cache_control_header(UT#urltype.mime,
-                                                         UT#urltype.finfo),
            doclose           = DoClose,
            chunked           = Chunked,
            transfer_encoding = make_transfer_encoding_chunked_header(Chunked)},
-
+    %% store finfo to set last_modified, expires and cache_control headers
+    %% during #outh{} serialization.
+    put(file_info, UT#urltype.finfo),
     put(outh, H2).
 
 
@@ -1113,6 +1375,10 @@ outh_set_auth(Headers) ->
          end,
     put(outh, H2).
 
+outh_set_vary(Fields) ->
+    put(outh, (get(outh))#outh{vary = make_vary_header(Fields)}),
+    ok.
+
 outh_fix_doclose() ->
     H = get(outh),
     if
@@ -1163,8 +1429,11 @@ make_allow_header(Options) ->
         [] ->
             HasDav = ?sc_has_dav(get(sc)),
             ["Allow: GET, POST, OPTIONS, HEAD",
-             if HasDav == true -> ", PUT, DELETE, PROPFIND, MKCOL, MOVE, COPY";
-                true           -> ""
+             case HasDav of
+                 true ->
+                     ", PUT, DELETE, PROPFIND, PROPPATCH, MKCOL, MOVE, COPY";
+                 false ->
+                     ""
              end, "\r\n"];
         _ ->
             ["Allow: ",
@@ -1180,81 +1449,37 @@ make_server_header() ->
                     undefined -> (get(gc))#gconf.yaws;
                     S         -> S
                 end,
-    ["Server: ", Signature, "\r\n" | if HasDav == true -> ["DAV: 1\r\n"];
+    ["Server: ", Signature, "\r\n" | if HasDav == true -> ["DAV: 1, 2, 3\r\n"];
                                         true           -> []
                                      end].
 
 make_last_modified_header(FI) ->
-    N = element(2, now()),
-    Inode = FI#file_info.inode,  %% unix only
-    case get({last_modified, Inode}) of
-        {Str, Secs} when N < (Secs+10) ->
-            Str;
-        _ ->
-            S = do_make_last_modified(FI),
-            put({last_modified, Inode}, {S, N}),
-            S
-    end.
-
-do_make_last_modified(FI) ->
     Then = FI#file_info.mtime,
     ["Last-Modified: ", local_time_as_gmt_string(Then), "\r\n"].
 
 
-make_expires_header(MimeType, FI) ->
-    N = element(2, now()),
-    case get({expire, MimeType}) of
-        {Str, Secs} when N < (Secs+10) ->
-            Str;
-        _ ->
-            SC = get(sc),
-            case lists:keysearch(MimeType, 1, SC#sconf.expires) of
-                {value, {MimeType, Type, TTL}} ->
-                    S1 = make_expires_header(Type, TTL, FI),
-                    S2 = make_cache_control_header(TTL),
-                    put({expire, MimeType}, {S1, N}),
-                    put({cache_control, MimeType}, {S2, N}),
-                    S1;
-                false ->
-                    undefined
-            end
+make_expires_header(MimeType0, FI) ->
+    SC = get(sc),
+    [MimeType1|_] = yaws:split_sep(MimeType0, $;), %% Remove charset
+    case lists:keyfind(MimeType1, 1, SC#sconf.expires) of
+        {MimeType1, Type, TTL} -> make_expires_header(Type, TTL, FI);
+        false                  -> {undefined, undefined}
     end.
 
 
 make_expires_header(access, TTL, _FI) ->
-    DateTime = erlang:universaltime(),
-    Secs = calendar:datetime_to_gregorian_seconds(DateTime) + TTL,
-    ExpireTime = calendar:gregorian_seconds_to_datetime(Secs),
-    ["Expires: ", universal_time_as_string(ExpireTime), "\r\n"];
+    Secs = calendar:datetime_to_gregorian_seconds(erlang:universaltime()),
+    ExpireTime = calendar:gregorian_seconds_to_datetime(Secs+TTL),
+    {["Expires: ", universal_time_as_string(ExpireTime), "\r\n"],
+     ["Cache-Control: ", "max-age=", erlang:integer_to_list(TTL), "\r\n"]};
 make_expires_header(modify, TTL, FI) ->
-    DateTime = FI#file_info.mtime,
-    Secs = calendar:datetime_to_gregorian_seconds(DateTime) + TTL,
-    ExpireTime = calendar:gregorian_seconds_to_datetime(Secs),
-    ["Expires: ", local_time_as_gmt_string(ExpireTime), "\r\n"].
-
-
-make_cache_control_header(MimeType, FI) ->
-    N = element(2, now()),
-    case get({cache_control, MimeType}) of
-        {Str, Secs} when N < (Secs+10) ->
-            Str;
-        _ ->
-            SC = get(sc),
-            case lists:keysearch(MimeType, 1, SC#sconf.expires) of
-                {value, {MimeType, Type, TTL}} ->
-                    S1 = make_cache_control_header(TTL),
-                    S2 = make_expires_header(Type, TTL, FI),
-                    put({cache_control, MimeType}, {S1, N}),
-                    put({expire, MimeType}, {S2, N}),
-                    S1;
-                false ->
-                    undefined
-            end
-    end.
-
-
-make_cache_control_header(TTL) ->
-    ["Cache-Control: ", "max-age=", integer_to_list(TTL), "\r\n"].
+    %% mtime is local here
+    Secs1 = calendar:datetime_to_gregorian_seconds(FI#file_info.mtime),
+    Secs2 = calendar:datetime_to_gregorian_seconds(erlang:localtime()),
+    ExpireTime = calendar:gregorian_seconds_to_datetime(Secs1+TTL),
+    MaxAge     = erlang:max(0, TTL - (Secs2 - Secs1)),
+    {["Expires: ", local_time_as_gmt_string(ExpireTime), "\r\n"],
+     ["Cache-Control: ", "max-age=", erlang:integer_to_list(MaxAge), "\r\n"]}.
 
 
 make_location_header(Where) ->
@@ -1292,14 +1517,14 @@ make_content_range_header(all) ->
     undefined;
 make_content_range_header({fromto, From, To, Tot}) ->
     ["Content-Range: bytes ",
-     integer_to_list(From), $-, integer_to_list(To),
-     $/, integer_to_list(Tot), $\r, $\n].
+     erlang:integer_to_list(From), $-, erlang:integer_to_list(To),
+     $/, erlang:integer_to_list(Tot), $\r, $\n].
 
 make_content_length_header(Size) when is_integer(Size) ->
-    ["Content-Length: ", integer_to_list(Size), "\r\n"];
+    ["Content-Length: ", erlang:integer_to_list(Size), "\r\n"];
 make_content_length_header(FI) when is_record(FI, file_info) ->
     Size = FI#file_info.size,
-    ["Content-Length: ", integer_to_list(Size), "\r\n"];
+    ["Content-Length: ", erlang:integer_to_list(Size), "\r\n"];
 make_content_length_header(_) ->
     undefined.
 
@@ -1341,6 +1566,12 @@ make_date_header() ->
             H
     end.
 
+make_vary_header(Fields) ->
+    case lists:member("*", Fields) of
+        true  -> ["Vary: ", "*", "\r\n"];
+        false -> ["Vary: ", join_sep(Fields, ", "), "\r\n"]
+    end.
+
 
 
 %% access functions into the outh record
@@ -1375,8 +1606,16 @@ outh_get_content_encoding_header() ->
     (get(outh))#outh.content_encoding.
 
 outh_get_content_type() ->
-    [_, Mime, _] = (get(outh))#outh.content_type,
-    Mime.
+    case (get(outh))#outh.content_type of
+        undefined    -> undefined;
+        [_, Mime, _] -> Mime
+    end.
+
+outh_get_vary_fields() ->
+    case (get(outh))#outh.vary of
+        undefined      -> [];
+        [_, Fields, _] -> split_sep(Fields, $,)
+    end.
 
 outh_serialize() ->
     H = get(outh),
@@ -1384,7 +1623,7 @@ outh_serialize() ->
                undefined -> 200;
                Int       -> Int
            end,
-    StatusLine = ["HTTP/1.1 ", integer_to_list(Code), " ",
+    StatusLine = ["HTTP/1.1 ", erlang:integer_to_list(Code), " ",
                   yaws_api:code_to_phrase(Code), "\r\n"],
     GC=get(gc),
     if ?gc_has_debug(GC) -> yaws_debug:check_headers(H);
@@ -1394,14 +1633,54 @@ outh_serialize() ->
                      undefined -> make_content_encoding_header(H#outh.encoding);
                      CE        -> CE
                  end,
+    {LastModified, Expires, CacheControl} =
+        case erase(file_info) of
+            undefined ->
+                {H#outh.last_modified, H#outh.expires, H#outh.cache_control};
+            FI ->
+                LM = case H#outh.last_modified of
+                         undefined ->
+                             make_last_modified_header(FI);
+                         _ ->
+                             H#outh.last_modified
+                     end,
+                {E, CC} = case {H#outh.expires, H#outh.cache_control} of
+                              {undefined, undefined} ->
+                                  CT = outh_get_content_type(),
+                                  make_expires_header(CT, FI);
+                              _ ->
+                                  {H#outh.expires, H#outh.cache_control}
+                          end,
+                {LM, E, CC}
+        end,
+
+    %% Add 'Accept-Encoding' in the 'Vary:' header if the compression is enabled
+    %% or if the response is compressed _AND_ if the response has a non-empty
+    %% body.
+    SC=get(sc),
+    Vary = case (?sc_has_deflate(SC) orelse H#outh.encoding == deflate) of
+               true when H#outh.contlen /= undefined, H#outh.contlen /= 0;
+                         H#outh.act_contlen /= undefined, H#outh.act_contlen /= 0 ->
+                   Fields = outh_get_vary_fields(),
+                   Fun    = fun("*") -> true;
+                               (F)   -> (to_lower(F) == "accept-encoding")
+                            end,
+                   case lists:any(Fun, Fields) of
+                       true  -> H#outh.vary;
+                       false -> make_vary_header(["Accept-Encoding"|Fields])
+                   end;
+               _ ->
+                   H#outh.vary
+           end,
+
     Headers = [noundef(H#outh.connection),
                noundef(H#outh.server),
                noundef(H#outh.location),
-               noundef(H#outh.cache_control),
                noundef(H#outh.date),
                noundef(H#outh.allow),
-               noundef(H#outh.last_modified),
-               noundef(H#outh.expires),
+               noundef(LastModified),
+               noundef(Expires),
+               noundef(CacheControl),
                noundef(H#outh.etag),
                noundef(H#outh.content_range),
                noundef(H#outh.content_length),
@@ -1410,6 +1689,7 @@ outh_serialize() ->
                noundef(H#outh.set_cookie),
                noundef(H#outh.transfer_encoding),
                noundef(H#outh.www_authenticate),
+               noundef(Vary),
                noundef(H#outh.other)],
     {StatusLine, Headers}.
 
@@ -1525,7 +1805,7 @@ accumulate_header({"Content-Length", Len}) ->
         I when is_integer(I) ->
             accumulate_header({content_length, I});
         L when is_list(L) ->
-            accumulate_header({content_length, list_to_integer(L)})
+            accumulate_header({content_length, erlang:list_to_integer(L)})
     end;
 
 accumulate_header({transfer_encoding, What}) ->
@@ -1541,6 +1821,11 @@ accumulate_header({www_authenticate, What}) ->
                                                    "\r\n"]});
 accumulate_header({"WWW-Authenticate", What}) ->
     accumulate_header({www_authenticate, What});
+
+accumulate_header({vary, What}) ->
+    put(outh, (get(outh))#outh{vary = ["Vary: ", What, "\r\n"]});
+accumulate_header({"Vary", What}) ->
+    accumulate_header({vary, What});
 
 %% non-special headers (which may be special in a future Yaws version)
 accumulate_header({Name, What}) when is_list(Name) ->
@@ -1601,7 +1886,9 @@ erase_header(transfer_encoding) ->
 erase_header(www_authenticate) ->
     put(outh, (get(outh))#outh{www_authenticate=undefined});
 erase_header(location) ->
-    put(outh, (get(outh))#outh{location=undefined}).
+    put(outh, (get(outh))#outh{location=undefined});
+erase_header(vary) ->
+    put(outh, (get(outh))#outh{vary=undefined}).
 
 getuid() ->
     case os:type() of
@@ -1632,23 +1919,15 @@ user_to_home(User) ->
 
 uid_to_name(Uid) ->
     load_setuid_drv(),
-    P = open_port({spawn, "setuid_drv " ++ [$n|integer_to_list(Uid)]}, []),
+    P = open_port({spawn, "setuid_drv " ++
+                       [$n|erlang:integer_to_list(Uid)]}, []),
     receive
         {P, {data, "ok " ++ Name}} ->
             Name
     end.
 
 load_setuid_drv() ->
-    %% below, ignore dialyzer warning:
-    %% "The pattern 'false' can never match the type 'true'"
-    Path = case yaws_generated:is_local_install() of
-               true ->
-                   filename:dirname(code:which(?MODULE)) ++ "/../priv/lib";
-               false ->
-                   %% ignore dialyzer on this one
-                   PrivDir = code:priv_dir(yaws),
-                   filename:join(PrivDir,"lib")
-           end,
+    Path = filename:join(get_priv_dir(), "lib"),
     case erl_ddll:load_driver(Path, "setuid_drv") of
         ok ->
             ok;
@@ -2091,9 +2370,9 @@ redirect_port(SC) ->
         {"https", _, 443}    -> "";
         {"http", _, 80}      -> "";
         {_, undefined, 80}   -> "";
-        {_, undefined, Port} -> [$:|integer_to_list(Port)];
+        {_, undefined, Port} -> [$:|erlang:integer_to_list(Port)];
         {_, _SSL, 443}       -> "";
-        {_, _SSL, Port}      -> [$:|integer_to_list(Port)]
+        {_, _SSL, Port}      -> [$:|erlang:integer_to_list(Port)]
     end.
 
 redirect_scheme_port(SC) ->
@@ -2142,8 +2421,9 @@ mktemp(Template, Ret) ->
 
 mktemp(Dir, Template, Ret, I, Max, Suffix) when I < Max ->
     {X,Y,Z}  = now(),
-    PostFix = integer_to_list(X) ++ "-" ++ integer_to_list(Y) ++ "-" ++
-        integer_to_list(Z),
+    PostFix = erlang:integer_to_list(X) ++ "-" ++
+        erlang:integer_to_list(Y) ++ "-" ++
+        erlang:integer_to_list(Z),
     F = filename:join(Dir, Template ++ [$_ | PostFix] ++ Suffix),
     filelib:ensure_dir(F),
     case file:open(F, [read, raw]) of
@@ -2195,25 +2475,26 @@ eat_crnl(Fd,SSL) ->
     case do_recv(Fd,0, SSL) of
         {ok, <<13,10>>} -> ok;
         {ok, [13,10]}   -> ok;
-        Err             -> {error, Err}
+        _               -> exit(normal)
     end.
 
-get_chunk_num(Fd,SSL) ->
+
+get_chunk_num(Fd, SSL) ->
+    {N, _} = get_chunk_header(Fd, SSL),
+    N.
+
+get_chunk_header(Fd, SSL) ->
     case do_recv(Fd, 0, SSL) of
-        {ok, Line} ->
+        {ok, Data} ->
+            Line = if is_binary(Data) -> binary_to_list(Data);
+                      true            -> Data
+                   end,
             ?Debug("Get chunk num from line ~p~n",[Line]),
-            erlang:list_to_integer(nonl(Line),16);
+            {N, Exts} = split_at(Line, $;),
+            {erlang:list_to_integer(strip_spaces(N),16), strip_spaces(Exts)};
         {error, _Rsn} ->
             exit(normal)
     end.
-
-nonl(B) when is_binary(B) -> nonl(binary_to_list(B));
-nonl([10|T])              -> nonl(T);
-nonl([13|T])              -> nonl(T);
-nonl([32|T])              -> nonl(T);
-nonl([H|T])               -> [H|nonl(T)];
-nonl([])                  -> [].
-
 
 
 get_chunk(_Fd, N, N, _) ->
@@ -2227,6 +2508,14 @@ get_chunk(Fd, N, Asz,SSL) ->
             exit(normal)
     end.
 
+get_chunk_trailer(Fd, SSL) ->
+    Hdrs = #headers{},
+    case http_collect_headers(Fd, undefined, Hdrs, SSL, 0) of
+        {error,_} -> exit(normal);
+        Hdrs      -> <<>>;
+        NewHdrs   -> {<<>>, NewHdrs}
+    end.
+
 %% split inputstring at first occurrence of Char
 split_at(String, Char) ->
     split_at(String, Char, []).
@@ -2236,3 +2525,170 @@ split_at([H|T], Char, Ack) ->
     split_at(T, Char, [H|Ack]);
 split_at([], _Char, Ack) ->
     {lists:reverse(Ack), []}.
+
+
+%% Parse an Ip address or an Ip address range
+%% Return Ip || {IpMin, IpMax} where:
+%%     Ip, IpMin, IpMax ::= ip_address()
+parse_ipmask(Str) when is_list(Str) ->
+    case string:tokens(Str, [$/]) of
+        [IpStr] ->
+            case inet_parse:address(IpStr) of
+                {ok, Ip}        -> Ip;
+                {error, Reason} -> throw({error, Reason})
+            end;
+        [IpStr, NetMask] ->
+            {Type, IpInt} = ip_to_integer(IpStr),
+            MaskInt       = netmask_to_integer(Type, NetMask),
+            case netmask_to_wildcard(Type, MaskInt) of
+                0 ->
+                    integer_to_ip(Type, IpInt);
+                Wildcard when Type =:= ipv4 ->
+                    NetAddr   = (IpInt band MaskInt),
+                    Broadcast = NetAddr + Wildcard,
+                    IpMin     = NetAddr + 1,
+                    IpMax     = Broadcast - 1,
+                    {integer_to_ip(ipv4, IpMin), integer_to_ip(ipv4, IpMax)};
+                Wildcard when Type =:= ipv6 ->
+                    NetAddr   = (IpInt band MaskInt),
+                    IpMin = NetAddr,
+                    IpMax = NetAddr + Wildcard,
+                    {integer_to_ip(ipv6, IpMin), integer_to_ip(ipv6, IpMax)}
+            end;
+        _ ->
+            throw({error, einval})
+    end;
+parse_ipmask(_) ->
+    throw({error, einval}).
+
+
+-define(MAXBITS_IPV4, 32).
+-define(MASK_IPV4,    16#FFFFFFFF).
+-define(MAXBITS_IPV6, 128).
+-define(MASK_IPV6,    16#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).
+
+ip_to_integer(Str) when is_list(Str) ->
+    case inet_parse:address(Str) of
+        {ok, Ip}        -> ip_to_integer(Ip);
+        {error, Reason} -> throw({error, Reason})
+    end;
+ip_to_integer({N1,N2,N3,N4}) ->
+    <<Int:32>> = <<N1:8, N2:8, N3:8, N4:8>>,
+    if
+        (Int bsr ?MAXBITS_IPV4) == 0 -> {ipv4, Int};
+        true -> throw({error, einval})
+    end;
+ip_to_integer({N1,N2,N3,N4,N5,N6,N7,N8}) ->
+    <<Int:128>> = <<N1:16, N2:16, N3:16, N4:16, N5:16, N6:16, N7:16, N8:16>>,
+    if
+        (Int bsr ?MAXBITS_IPV6) == 0 -> {ipv6, Int};
+        true -> throw({error, einval})
+    end;
+ip_to_integer(_) ->
+    throw({error, einval}).
+
+integer_to_ip(ipv4, I) when is_integer(I), I =< ?MASK_IPV4 ->
+    <<N1:8, N2:8, N3:8, N4:8>> = <<I:32>>,
+    {N1, N2, N3, N4};
+integer_to_ip(ipv6, I) when is_integer(I), I =< ?MASK_IPV6 ->
+    <<N1:16, N2:16, N3:16, N4:16, N5:16, N6:16, N7:16, N8:16>> = <<I:128>>,
+    {N1, N2, N3, N4, N5, N6, N7, N8};
+integer_to_ip(_, _) ->
+    throw({error, einval}).
+
+netmask_to_integer(Type, NetMask) ->
+    case catch erlang:list_to_integer(NetMask) of
+        I when is_integer(I) ->
+            case Type of
+                ipv4 -> (1 bsl ?MAXBITS_IPV4) - (1 bsl (?MAXBITS_IPV4 - I));
+                ipv6 -> (1 bsl ?MAXBITS_IPV6) - (1 bsl (?MAXBITS_IPV6 - I))
+            end;
+        _ ->
+            case ip_to_integer(NetMask) of
+                {Type, MaskInt} -> MaskInt;
+                _               -> throw({error, einval})
+            end
+    end.
+
+netmask_to_wildcard(ipv4, Mask) -> ((1 bsl ?MAXBITS_IPV4) - 1) bxor Mask;
+netmask_to_wildcard(ipv6, Mask) -> ((1 bsl ?MAXBITS_IPV6) - 1) bxor Mask.
+
+
+%% Compare an ip to another ip or a range of ips
+match_ipmask(Ip, Ip) ->
+    true;
+match_ipmask(Ip, {IpMin, IpMax}) ->
+    case compare_ips(Ip, IpMin) of
+        error -> false;
+        less  -> false;
+        _ ->
+            case compare_ips(Ip, IpMax) of
+                error   -> false;
+                greater -> false;
+                _       -> true
+            end
+    end;
+match_ipmask(_, _) ->
+    false.
+
+compare_ips({A,B,C,D},          {A,B,C,D})                       -> equal;
+compare_ips({A,B,C,D,E,F,G,H},  {A,B,C,D,E,F,G,H})               -> equal;
+compare_ips({A,B,C,D1},         {A,B,C,D2})         when D1 < D2 -> less;
+compare_ips({A,B,C,D1},         {A,B,C,D2})         when D1 > D2 -> greater;
+compare_ips({A,B,C1,_},         {A,B,C2,_})         when C1 < C2 -> less;
+compare_ips({A,B,C1,_},         {A,B,C2,_})         when C1 > C2 -> greater;
+compare_ips({A,B1,_,_},         {A,B2,_,_})         when B1 < B2 -> less;
+compare_ips({A,B1,_,_},         {A,B2,_,_})         when B1 > B2 -> greater;
+compare_ips({A1,_,_,_},         {A2,_,_,_})         when A1 < A2 -> less;
+compare_ips({A1,_,_,_},         {A2,_,_,_})         when A1 > A2 -> greater;
+compare_ips({A,B,C,D,E,F,G,H1}, {A,B,C,D,E,F,G,H2}) when H1 < H2 -> less;
+compare_ips({A,B,C,D,E,F,G,H1}, {A,B,C,D,E,F,G,H2}) when H1 > H2 -> greater;
+compare_ips({A,B,C,D,E,F,G1,_}, {A,B,C,D,E,F,G2,_}) when G1 < G2 -> less;
+compare_ips({A,B,C,D,E,F,G1,_}, {A,B,C,D,E,F,G2,_}) when G1 > G2 -> greater;
+compare_ips({A,B,C,D,E,F1,_,_}, {A,B,C,D,E,F2,_,_}) when F1 < F2 -> less;
+compare_ips({A,B,C,D,E,F1,_,_}, {A,B,C,D,E,F2,_,_}) when F1 > F2 -> greater;
+compare_ips({A,B,C,D,E1,_,_,_}, {A,B,C,D,E2,_,_,_}) when E1 < E2 -> less;
+compare_ips({A,B,C,D,E1,_,_,_}, {A,B,C,D,E2,_,_,_}) when E1 > E2 -> greater;
+compare_ips({A,B,C,D1,_,_,_,_}, {A,B,C,D2,_,_,_,_}) when D1 < D2 -> less;
+compare_ips({A,B,C,D1,_,_,_,_}, {A,B,C,D2,_,_,_,_}) when D1 > D2 -> greater;
+compare_ips({A,B,C1,_,_,_,_,_}, {A,B,C2,_,_,_,_,_}) when C1 < C2 -> less;
+compare_ips({A,B,C1,_,_,_,_,_}, {A,B,C2,_,_,_,_,_}) when C1 > C2 -> greater;
+compare_ips({A,B1,_,_,_,_,_,_}, {A,B2,_,_,_,_,_,_}) when B1 < B2 -> less;
+compare_ips({A,B1,_,_,_,_,_,_}, {A,B2,_,_,_,_,_,_}) when B1 > B2 -> greater;
+compare_ips({A1,_,_,_,_,_,_,_}, {A2,_,_,_,_,_,_,_}) when A1 < A2 -> less;
+compare_ips({A1,_,_,_,_,_,_,_}, {A2,_,_,_,_,_,_,_}) when A1 > A2 -> greater;
+compare_ips(_,                  _)                               -> error.
+
+
+%% ----
+get_app_subdir(SubDir) when is_atom(SubDir) ->
+    %% below, ignore dialyzer warning:
+    %% "The pattern 'false' can never match the type 'true'"
+    case yaws_generated:is_local_install() of
+        true ->
+            EbinDir = get_ebin_dir(),
+            filename:join(filename:dirname(EbinDir), atom_to_list(SubDir));
+        false ->
+            code:lib_dir(yaws, SubDir)
+    end.
+
+get_app_dir() ->
+    %% below, ignore dialyzer warning:
+    %% "The pattern 'false' can never match the type 'true'"
+    case yaws_generated:is_local_install() of
+        true  -> filename:dirname(get_ebin_dir());
+        false -> code:lib_dir(yaws)
+    end.
+
+get_src_dir() ->
+    Info = ?MODULE:module_info(compile),
+    filename:dirname(proplists:get_value(source, Info)).
+
+get_ebin_dir() ->
+    filename:dirname(code:which(?MODULE)).
+
+get_priv_dir() ->
+    get_app_subdir(priv).
+
+get_inc_dir() ->
+    get_app_subdir(include).

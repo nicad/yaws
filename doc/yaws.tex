@@ -1547,7 +1547,7 @@ periods. For these situations we can return the value:
 {streamcontent_from_pid, MimeType, Pid}
 \end{verbatim}
 
-\noindent to tell \Yaws\ we wish to deliver data of mime type
+\noindent to tell \Yaws\ we wish to deliver data of MIME type
 \verb+MimeType+ to the client from process \verb+Pid+. In this case,
 \Yaws\ will prepare the socket for delivery from \verb+Pid+ and then
 send one of the following messages to \verb+Pid+:
@@ -1653,8 +1653,51 @@ detect a \verb+Content-Length+ header.
   stream data, in this case, the response is not chunked encoded.
 
 
-\item \verb+{header, H}+ Accumulates a HTTP header. Used by for
-  example the \verb+yaws_api:setcookie/2-6+ function.
+\item \verb+{header, H}+ Accumulates a HTTP header. The trailing CRNL which is
+  supposed to end all HTTP headers must NOT be added. It is added by the server.
+  The following list of headers are given special treatment.
+
+  \begin{itemize}
+    \item \verb+{connection, What}+ - This sets the Connection: header. If
+      \textit{What} is the special value \textit{\"close\"}, the connection will
+      be closed once the yaws page is delivered to the client.
+    \item \verb+{server, What}+ - Sets the \textit{Server:} header. By setting
+      this header, the server's signature will be dynamically overloaded.
+    \item \verb+{location, What}+ - Sets the \textit{Location:} header. This
+      header is typically combined with the \textit{\{status, 302\}} return
+      value.
+    \item \verb+{cache_control, What}+ - Sets the \textit{Cache-Control:}
+      header.
+    \item \verb+{expires, What}+ - Sets the \textit{Expires:} header.
+    \item \verb+{date, What}+ - Sets the \textit{Date:} header.
+    \item \verb+{allow, What}+ - Sets the \textit{Allow:} header.
+    \item \verb+{last_modified, What}+ - Sets the \textit{Last-Modified:}
+      header.
+    \item \verb+{etag, What}+ - Sets the \textit{Etag:} header.
+    \item \verb+{set_cookie, What}+ - Prepends a \textit{Set-Cookie:} header to
+      the list of previously set \textit{Set-Cookie} headers.
+    \item \verb+{content_range, What}+ - Sets the \textit{Content-Range:}
+      header.
+    \item \verb+{content_type, What}+ - Sets the \textit{Content-Type:} header.
+    \item \verb+{content_encoding, What}+ - Sets the \textit{Content-Encoding:}
+      header. If this header is defined, no deflate is performed by \Yaws\. So
+      you can compress data by yourself.
+    \item \verb+{content_length, What}+ - Normally \Yaws\ will ship Yaws pages
+      using \textit{Transfer-Encoding: chunked}. This is because we generally
+      can't know how long a yaws page will be. If we for some reason want to
+      force a \textit{Content-Length:} header (and we actually do know the
+      length of the content, we can force yaws to not ship the page chunked.
+    \item \verb+{transfer_encoding, What}+ - Sets the
+      \textit{Transfer-Encoding:} header.
+    \item \verb+{www_authenticate, What}+ - Sets the \textit{WWW-Authenticate:}
+      header.
+    \item \verb+{vary, What}+ - Sets the \textit{Vary:} header.
+  \end{itemize}
+
+  All other headers must be added using the normal HTTP syntax. Example:
+\begin{verbatim}
+{header, {"My-X-Header", "gadong"}} or {header, "My-X-Header: gadong"}
+\end{verbatim}
 
 \item \verb+{header, {H, erase}}+ A specific case of the previous
   directive; use this to remove a specific header from a response. For
@@ -1699,13 +1742,21 @@ detect a \verb+Content-Length+ header.
   \verb+POST+s we can return this value and be invoked again when more
   data arrives.
 
-\item \verb+{page, Page}+ Make \Yaws\ return a different local page
-  than the one being requested.
+\item \verb+{page, Page}+ Make \Yaws\ returns a different local page than the
+  one being requested. \verb+Page+ is a Request-URI, so it must be url-encoded
+  and can contain a query-string.
 
 \item \verb+{page, {Options, Page}}+ Like the above, but supplying an
-  additional deep list of options.  For now, the only type of option
-  is \verb+{header, H}+ with the effect of accumulating the HTTP
-  header \verb+H+ for page \verb+Page+.
+  additional deep list of options.  Supported options types are:
+
+  \begin{itemize}
+    \item \verb+{status, C}+ - Set the HTTP response status code \verb+C+ for
+      page \verb+Page+.
+    \item \verb+{header, H}+ - Accumulate the HTTP header \verb+H+ for page
+      \verb+Page+.
+    \item \verb+{disable_cache, Bool}+ - if set to \verb+true+, disable the
+      cache of \verb+Page+ for this call.
+  \end{itemize}
 
 \item \verb+{websocket, CallbackModule, Options}+ Tell \Yaws\  to use
   \verb+CallbackModule+ as a WebSockets Protocol handler for traffic
@@ -2319,6 +2370,50 @@ part where options for each virtual host is supplied.
 \item        \verb+x_forwarded_for_log_proxy_whitelist = ListOfUpstreamProxyServerIps+ ---
               \textit{This target is deprecated and will be ignored}.
 
+\item        \verb+default_type = MimeType+ ---
+              Defines the default MIME type to be used where \Yaws\ cannot
+              determine it by its MIME types mappings. Default is
+              \textit{text/plain}.
+
+\item        \verb+default_charset = Charset+ ---
+              Defines the default charset to be added when a response
+              content-type is \textit{text/*}. By default, no charset is added.
+
+\item        \verb+mime_types_file = File+ ---
+              Overloads the default \textit{mime.types} file included with
+              \Yaws{}. This file must use the following format:
+\begin{verbatim}
+  # Lines beginning with a '#' or a whitespace are ignored
+  # blank lines are also ignored
+  <MIME type> <space separated file extensions>
+\end{verbatim}
+              The default file is located at
+              \textit{\${PREFIX}/lib/yaws/priv/mime.types}. You should not edit
+              this file because it may be replaced when you upgrade your server.
+
+\item        \verb+add_types = ListOfTypes+ ---
+              Specifies one or more mappings between MIME types and file
+              extensions. More than one extension can be assigned to a MIME
+              type. \textit{ListOfTypes} is defined as follows:
+\begin{verbatim}
+  add_types = <MimeType1, Ext> <MimeType2, Ext1 Ext2 ...> ...
+\end{verbatim}
+              The mappings defined using this directive will overload all other
+              definitions. If a file extension is defined several times, only
+              the last one is kept. Multiple \textit{add\_types} directives may
+              be used.
+
+\item        \verb+add_charsets = ListOfCharsets+ ---
+              Specifies one or more mappings between charsets and file
+              extensions. More than one extension can be assigned to a
+              charset. \textit{ListOfCharsets} is defined as follows:
+\begin{verbatim}
+  add_charsets = <Charset1, Ext> <Charset2, Ext1 Ext2 ...> ...
+\end{verbatim}
+              The mappings defined using this directive will overload all other
+              definitions. If a file extension is defined several times, only
+              the last one is kept. Multiple \textit{add\_charsets} directives
+              may be used.
 \end{itemize}
 
 
@@ -2340,12 +2435,13 @@ The following directives are allowed inside a server definition.
               This makes the server listen on Port. Default is 8000.
 
 \item        \verb+listen = IpAddress+ ---
-              This makes the  server  listen  on  \verb+IpAddress+  when
-              virthosting  several  servers  on  the same IP/port
-              address, if the browser doesn't send a \verb+Host:+ field,
-              \Yaws\   will  pick  the first server specified in the
-              config file. Multiple \verb+listen+ directives may be
-              used to specify several addresses to listen on.
+              This makes the server listen on \verb+IpAddress+ when
+              virthosting several servers on the same IP/port address, if
+              the browser doesn't send a \verb+Host:+ field, \Yaws\ will
+              pick the first server specified in the config file. Multiple
+              \verb+listen+ directives may be used to specify several
+              addresses to listen on. The default listen interface is
+              127.0.0.1.
 
 \item        \verb+listen_backlog = Integer+ ---
               This sets the TCP listen backlog for the server to
@@ -2578,18 +2674,17 @@ The following directives are allowed inside a server definition.
               prohibitive when \Yaws\  starts up. Defaults to false.
 
 \item       \verb+partial_post_size = Integer+ ---
-              When a \Yaws\  file receives large  \verb+POST+s,  the
-              amount  of  data  received  in each chunk is
-              determined by the this parameter.  The default
-              value is 10240.
+              When a \Yaws\ file receives large \verb+POST+s, the amount of data
+              received in each chunk is determined by the this parameter.  The
+              default value is 10240. Setting it to nolimit is potentially
+              dangerous.
 
 \item       \verb+dav = true | false+ ---
               Turns on the DAV protocol for this server. The dav support in
               \Yaws\ is highly limited. If dav is turned on, .yaws processing of
-              .yaws pages is turned off. Default is false. Setting it to nolimit
-              is potentially dangerous. The socket read timeout is supplied by
-              the keepalive\_timeout setting. If the read is not done within the
-              timeout, the POST will fail.
+              .yaws pages is turned off. Default is false. The socket read
+              timeout is supplied by the keepalive\_timeout setting. If the read
+              is not done within the timeout, the POST will fail.
 
 \item       \verb+tilde_expand = true|false+ ---
               If  this  value  is  set  to false \Yaws\  will
@@ -2646,6 +2741,30 @@ The following directives are allowed inside a server definition.
              The above configuration will invoke the \verb+myapp+ erlang module
              on everything except any file found in directories \verb+icons+,
              \verb+js+ and \verb+top/static+ relative to the docroot.
+
+\item       \verb+dispatchmod = DispatchModule+ ---
+              Set \verb+DispatchModule+ as a server-specific request
+              dispatching module. \Yaws\  expects \verb+DispatchModule+ to
+              export a \verb+dispatch/1+ function. When it receives a
+              request, \Yaws\  passes an \verb+#arg{}+ record to the dispatch
+              module's \verb+dispatch/1+ function, which returns one of the
+              following atom results:
+              \begin{itemize}
+                \item \verb+done+ --- this indicates the dispatch module
+                  handled the request itself and already sent the response,
+                  and \Yaws\  should resume watching for new requests on the
+                  connection
+                \item \verb+closed+ --- same as \verb+done+ but the
+                  \verb+DispatchModule+ also closed the connection
+                \item \verb+continue+ --- the dispatch module has decided
+                  not to handle the request, and instead wants \Yaws\  to
+                  perform its regular request dispatching
+              \end{itemize}
+              Note that when \verb+DispatchModule+ handles a request itself,
+              \Yaws\  does not support tracing, increment statistics
+              counters or allow traffic shaping for that request. It does
+              however still keep track of maximum keepalive uses on the
+              connection.
 
 \item       \verb+errormod_404 = Module+ ---
               It is possible to set a special module that handles 404 Not Found
@@ -2872,6 +2991,31 @@ The following directives are allowed inside a server definition.
               Use this directive is same as:
               \verb+php_handler = <fcgi, HostPortSpec>+.
 
+\item        \verb+default_type = MimeType+ ---
+              Overloads the global \verb+default_type+ value for this virtual
+              server.
+
+\item        \verb+default_charset = Charset+ ---
+              Overloads the global \verb+default_charset+ value for this virtual
+              server.
+
+\item        \verb+mime_types_file = File+ ---
+              Overrides the global \verb+mime_type_file+ value for this virtual
+              server. Mappings defined in \textit{File} will not overload those
+              defined by \verb+add_types+ directives in the global part.
+
+\item        \verb+add_types = ListOfTypes+ ---
+               Overloads the global \verb+add_types+ values for this virtual
+               server. If a mapping is defined in the global part and redefined
+               in a server part using this directive, then it is replaced. Else
+               it is kept.
+
+\item        \verb+add_charsets = ListOfCharsets+ ---
+              Overloads the global \verb+add_charsets+ values for this virtual
+              server. If a mapping is defined in the global part and redefined
+              in a server part using this directive, then it is replaced. Else
+              it is kept.
+
 \item        \verb+<ssl>  .... </ssl>+
                This begins and ends an SSL configuration for this server. It's
                possible to virthost several SSL servers on the same IP given
@@ -2939,14 +3083,25 @@ The following directives are allowed inside a server definition.
 
 \item       \verb+<redirect> ... </redirect>+ ---
               Defines a redirect mapping. The following items are allowed within
-              a matching pair of \verb+<redirect>+ and \verb+</redirect>+ delimiters.
+              a matching pair of \verb+<redirect>+ and \verb+</redirect>+
+              delimiters.
 
-              We can have a series of \verb+Path = URL+ or \verb+Path = file+
+              We can have a series of redirect rules in one of formats below:
+\begin{verbatim}
+  Path = URL
+  Path = code
+  Path = code URL
+\end{verbatim}
+              \verb+Path+ must be an url-decoded path beginning with a
+              slash. \verb+URL+ may be either a relative URL (a path beginning
+              with a slash), or an absolute URL. In the first case, the
+              \textit{scheme:hostname:port} of the current server will be
+              added. All accesses to \verb+Path+ will be redirected to
+              \verb+URL/Path+ (or \verb+scheme:hostname:port/URL/Path+ if
+              \verb+URL+ is relative). \verb+URL+ must be url-encoded. Note that
+              the original path is appended to the redirected URL.
 
-              All accesses to \verb+Path+ will be redirected to \verb+URL/Path+
-              or to \verb+scheme:host:port/file/Path+ if a file is
-              used. Note that the original path is appended to the redirected
-              url. So if we for example have:
+              For example, assume we have the following redirect configuration:
 \begin{verbatim}
   <redirect>
     /foo = http://www.mysite.org/zapp
@@ -2954,16 +3109,28 @@ The following directives are allowed inside a server definition.
   </redirect>
 \end{verbatim}
               Assuming this config resides on a site called
-              \url{http://abc.com}, We have the following redirects:
+              \url{http://abc.com}, we have the following redirects:
 \begin{verbatim}
   http://abc.com/foo -> http://www.mysite.org/zapp/foo
-
   http://abc.com/foo/test -> http://www.mysite.org/zapp/foo/test
-
-  http://abc.com/bar -> http://abc.com/bar
-
-  http://abc.com/bar/x/y/z -> http://abc.com/bar/x/y/z
+  http://abc.com/bar -> http://abc.com/tomato.html/bar
+  http://abc.com/bar/x/y/z -> http://abc.com/tomato.html/bar/x/y/z
 \end{verbatim}
+
+              By default, \Yaws\ will perform a 302 redirect. The HTTP
+              status code can be changed using the \verb+code+
+              parameter. Note that \Yaws\ must have knowledge of the status
+              code value.
+              \begin{itemize}
+              \item For 3xx status codes, the \verb+URL+ parameter must be
+                present and will be used to build the new location.
+              \item For other status codes (1xx, 2xx, 4xx and 5xx), the
+                \verb+URL+ can be omitted. In the absence of \verb+URL+,
+                \Yaws\ will return a generic response with the specified
+                status code.
+              \item Otherwise, the \verb+URL+ parameter must be a relative
+                URL and will be used to customize the response.
+              \end{itemize}
               Sometimes we do not want to have the original path appended to the
               redirected path. To get that behaviour we specify the config with
               '==' instead of '='.
@@ -2974,13 +3141,13 @@ The following directives are allowed inside a server definition.
   </redirect>
 \end{verbatim}
               With this configuration, a request for
-              \url{http://abc.com/foo/x/y/z} simply gets redirected to
+              \url{http://abc.com/foo/x/y/z} simply gets redirected to \\
               \url{http://www.mysite.org/zapp}. This is typically used when
               we simply want a static redirect at some place in the
               docroot.
 
-              When we specify a file as target for the redirect, the redir will
-              be to the current http(s) server.
+              When we specify a relative URL as the target for the
+              redirect, the redirect will be to the current http(s) server.
 
 \item       \verb+<auth> ... </auth>+ ---
               Defines an auth structure.  The following items are allowed within
@@ -3090,10 +3257,10 @@ The following directives are allowed inside a server definition.
                     denied by default.
 
                   \item \verb+deny,allaw+ --- First, all \verb+deny+ directives
-                    are evaluated; if any match, the request is denied unless it
-                    also matches an \verb+allow+ directive. Any requests which
-                    do not match any \verb+allow+ or \verb+deny+ directives are
-                    permitted.
+                    are evaluated; if any matches, the request is denied unless
+                    it also matches an \verb+allow+ directive. Any requests
+                    which do not match any \verb+allow+ or \verb+deny+
+                    directives are permitted.
                 \end{itemize}
               \end{itemize}
 

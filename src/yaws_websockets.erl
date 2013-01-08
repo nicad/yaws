@@ -40,18 +40,18 @@
 %%
 start(Arg, CallbackMod, Opts) ->
     SC = get(sc),
-    CliSock = Arg#arg.clisock,
     PrepdOpts = preprocess_opts(Opts),
     {ok, OwnerPid} = gen_server:start(?MODULE, [Arg, SC, CallbackMod, PrepdOpts], []),
     CliSock = Arg#arg.clisock,
-    TakeOverResult = case SC#sconf.ssl of
-                         undefined ->
-                             inet:setopts(CliSock, [{packet, raw}, {active, once}]),
-                             gen_tcp:controlling_process(CliSock, OwnerPid);
-                         _ ->
-                             ssl:setopts(CliSock, [{packet, raw}, {active, once}]),
-                             ssl:controlling_process(CliSock, OwnerPid)
-                     end,
+    TakeOverResult =
+        case yaws_api:get_sslsocket(CliSock) of
+            {ok, SslSocket} ->
+                ssl:setopts(SslSocket, [{packet, raw}, {active, once}]),
+                ssl:controlling_process(SslSocket, OwnerPid);
+            undefined ->
+                inet:setopts(CliSock, [{packet, raw}, {active, once}]),
+                gen_tcp:controlling_process(CliSock, OwnerPid)
+        end,
     case TakeOverResult of
         ok ->
             gen_server:cast(OwnerPid, ok),
@@ -64,10 +64,8 @@ start(Arg, CallbackMod, Opts) ->
 send(#ws_state{sock=Socket, vsn=ProtoVsn}, {Type, Data}) ->
     DataFrame = frame(ProtoVsn, Type,  Data),
     case yaws_api:get_sslsocket(Socket) of
-        {ok, SslSocket} ->
-            ssl:send(SslSocket, DataFrame);
-        _ ->
-            gen_tcp:send(Socket, DataFrame)
+        {ok, SslSocket} -> ssl:send(SslSocket, DataFrame);
+        undefined       -> gen_tcp:send(Socket, DataFrame)
     end;
 send(Pid, {Type, Data}) ->
     gen_server:cast(Pid, {send, {Type, Data}}).
@@ -104,10 +102,8 @@ handle_cast(ok, #state{arg=Arg, sconf=SC, opts=Opts}=State) ->
             Handshake = handshake(ProtocolVersion, Arg, CliSock,
                                   WebSocketLocation, Origin, Protocol),
             case yaws_api:get_sslsocket(CliSock) of
-                {ok, SslSocket} ->
-                    ssl:send(SslSocket, Handshake);
-                _ ->
-                    gen_tcp:send(CliSock, Handshake)
+                {ok, SslSocket} -> ssl:send(SslSocket, Handshake);
+                undefined       -> gen_tcp:send(CliSock, Handshake)
             end,
             {callback, CallbackType} = lists:keyfind(callback, 1, Opts),
             WSState = #ws_state{sock = CliSock,
@@ -155,11 +151,16 @@ handle_info({tcp, Socket, FirstPacket}, #state{wsstate=#ws_state{sock=Socket}}=S
     case Results of
         {close, Reason} ->
             do_close(WSState, Reason),
-            {stop, Reason, State#state{cbstate=NewCallbackState}};
+            {stop, normal, State#state{cbstate=NewCallbackState}};
         _ ->
             Last = lists:last(FrameInfos),
-            NewWSState = Last#ws_frame_info.ws_state,
-            {noreply, State#state{wsstate=NewWSState, cbstate=NewCallbackState}}
+            if
+                is_record(Last, ws_frame_info) ->
+                    NewWSState = Last#ws_frame_info.ws_state,
+                    {noreply, State#state{wsstate=NewWSState, cbstate=NewCallbackState}};
+                true ->
+                    {stop, normal, State#state{cbstate=NewCallbackState}}
+            end
     end;
 handle_info({tcp_closed, Socket}, #state{wsstate=#ws_state{sock=Socket}}=State) ->
     %% The only way we should get here is due to an abnormal close.
@@ -200,11 +201,9 @@ code_change(_OldVsn, Data, _Extra) ->
 
 do_send(#ws_state{sock=Socket, vsn=ProtoVsn}, {Type, Data}) ->
     DataFrame = frame(ProtoVsn, Type,  Data),
-    case Socket of
-        {sslsocket,_,_} ->
-            ssl:send(Socket, DataFrame);
-        _ ->
-            gen_tcp:send(Socket, DataFrame)
+    case yaws_api:get_sslsocket(Socket) of
+        {ok, SslSocket} -> ssl:send(SslSocket, DataFrame);
+        undefined       -> gen_tcp:send(Socket, DataFrame)
     end.
 
 preprocess_opts(GivenOpts) ->
@@ -405,9 +404,11 @@ buffer(Socket, Len, Buffered) ->
         _ ->
             %% not enough
             %% debug(val, {buffering, "need:", Len, "waiting for more..."}),
-            %% TODO: take care of ssl sockets
             Needed = Len - binary_length(Buffered),
-            {ok, More} = gen_tcp:recv(Socket, Needed),
+            {ok, More} = case yaws_api:get_sslsocket(Socket) of
+                             {ok, SslSocket} -> ssl:recv(SslSocket, Needed);
+                             undefined       -> gen_tcp:recv(Socket, Needed)
+                         end,
             <<Buffered/binary, More/binary>>
     end.
 
@@ -465,7 +466,7 @@ ws_frame_info(#ws_state{sock=Socket},
     case check_control_frame(Len1, Opcode, Fin) of
         ok ->
             {ws_frame_info_secondary, Length, MaskingKey, Payload, Excess}
-                = ws_frame_info_secondary(Socket, Len1, Rest),
+                = ws_frame_info_secondary(Socket, Masked, Len1, Rest),
             FrameInfo = #ws_frame_info{fin=Fin,
                                        rsv=Rsv,
                                        opcode=opcode_to_atom(Opcode),
@@ -481,16 +482,21 @@ ws_frame_info(#ws_state{sock=Socket},
 ws_frame_info(State = #ws_state{sock=Socket}, FirstPacket) ->
     ws_frame_info(State, buffer(Socket, 2,FirstPacket)).
 
-ws_frame_info_secondary(Socket, Len1, Rest) ->
+
+ws_frame_info_secondary(Socket, Masked, Len1, Rest) ->
+    MaskLength = case Masked of
+        0 -> 0;
+        1 -> 4
+    end,
     case Len1 of
         126 ->
-            <<Len:16, MaskingKey:4/binary, Rest2/binary>> =
+            <<Len:16, MaskingKey:MaskLength/binary, Rest2/binary>> =
                 buffer(Socket, 6, Rest);
         127 ->
-            <<Len:64, MaskingKey:4/binary, Rest2/binary>> =
+            <<Len:64, MaskingKey:MaskLength/binary, Rest2/binary>> =
                 buffer(Socket, 12, Rest);
         Len ->
-            <<MaskingKey:4/binary, Rest2/binary>> = buffer(Socket, 4, Rest)
+            <<MaskingKey:MaskLength/binary, Rest2/binary>> = buffer(Socket, 4, Rest)
     end,
     if
 	Len > ?MAX_PAYLOAD ->
@@ -529,28 +535,30 @@ unframe(State, FirstPacket) ->
 
 %% -> {#ws_frame_info, RestBin} | {fail_connection, Reason}
 unframe_one(State = #ws_state{vsn=8}, FirstPacket) ->
-    {FrameInfo = #ws_frame_info{}, RestBin} = ws_frame_info(State, FirstPacket),
-    Unmasked = mask(FrameInfo#ws_frame_info.masking_key,
-                    FrameInfo#ws_frame_info.payload),
-    NewState = frag_state_machine(State, FrameInfo),
-    Unframed = FrameInfo#ws_frame_info{data = Unmasked,
-                                       ws_state = NewState},
+    case ws_frame_info(State, FirstPacket) of
+        {FrameInfo = #ws_frame_info{}, RestBin} -> 
+            Unmasked = mask(FrameInfo#ws_frame_info.masking_key,
+                            FrameInfo#ws_frame_info.payload),
+            NewState = frag_state_machine(State, FrameInfo),
+            Unframed = FrameInfo#ws_frame_info{data = Unmasked,
+                                               ws_state = NewState},
 
-    case checks(Unframed) of
-        #ws_frame_info{} when is_record(NewState, ws_state) ->
-            {Unframed, RestBin};
-        #ws_frame_info{} when not is_record(NewState, ws_state) ->
-            NewState;   % pass back the error details
-        Fail ->
-            Fail
+            case checks(Unframed) of
+                #ws_frame_info{} when is_record(NewState, ws_state) ->
+                    {Unframed, RestBin};
+                #ws_frame_info{} when not is_record(NewState, ws_state) ->
+                    NewState;   % pass back the error details
+                Fail ->
+                    Fail
+            end;
+        Else ->
+            Else
     end.
 
 websocket_setopts(#ws_state{sock=Socket}, Opts) ->
     case yaws_api:get_sslsocket(Socket) of
-        {ok, SslSocket} ->
-            ssl:setopts(SslSocket, Opts);
-        _ ->
-            inet:setopts(Socket, Opts)
+        {ok, SslSocket} -> ssl:setopts(SslSocket, Opts);
+        undefined       -> inet:setopts(Socket, Opts)
     end.
 
 is_control_op(Op) ->
@@ -655,6 +663,9 @@ mask(MaskBin, Data) ->
 %% unmask == mask. It's XOR of the four-byte masking key.
 rmask(_,<<>>) ->
     [<<>>];
+
+rmask(<<>>, Data) ->
+    [Data];
 
 rmask(MaskBin = <<Mask:4/integer-unit:8>>,
       <<Data:4/integer-unit:8, Rest/binary>>) ->

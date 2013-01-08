@@ -284,15 +284,51 @@ set_cookie_expires_test() ->
     ok.
 
 real_cookies_test() ->
-    {ok, Io} = file:open("cookies.dump", read),
+    {ok, Io} = case file:open("cookies.dump", read) of
+                   {error, _} ->
+                       %% handle eunit testing under rebar
+                       file:open("../test/eunit/cookies.dump", read);
+                   Else ->
+                       Else
+               end,
     ?assertEqual(ok, parse_cookies(Io, file:read_line(Io), 1)),
     ok.
 
 real_setcookies_test() ->
-    {ok, Io} = file:open("setcookies.dump", read),
+    {ok, Io} = case file:open("setcookies.dump", read) of
+                   {error, _} ->
+                       %% handle eunit testing under rebar
+                       file:open("../test/eunit/setcookies.dump", read);
+                   Else ->
+                       Else
+               end,
     ?assertEqual(ok, parse_set_cookies(Io, file:read_line(Io), 1)),
     ok.
 
+set_cookie_test() ->
+    ?assertEqual(
+        "a=bcd; Version=1; Comment=OK; Domain=g.com; Path=/; Max-Age=1; "
+        "Expires=Tue, 03 Jan 2012 10:00:05 GMT; HttpOnly; Secure",
+        begin
+            {header, {set_cookie, L}} = yaws_api:set_cookie("a", "bcd",
+                [{expires, {{2012,1,3},{10,0,5}}},
+                 {max_age, 1}, secure, http_only,
+                 {path, "/"}, {domain, "g.com"}, {comment, "OK"}]),
+            lists:flatten(L)
+        end),
+    ?assertEqual(
+        "a=bcd; Version=1; Path=/home",
+        begin
+            {header, {set_cookie, L}} =
+                yaws_api:set_cookie("a", "bcd", [{path, "/home"}]),
+            lists:flatten(L)
+        end),
+    ?assertEqual(
+        "a=bcd; Version=1",
+        begin
+            {header, {set_cookie, L}} = yaws_api:set_cookie("a", "bcd", []),
+            lists:flatten(L)
+        end).
 
 parse_cookies(Io, eof, _) ->
     file:close(Io),
