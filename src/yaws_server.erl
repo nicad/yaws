@@ -3830,10 +3830,10 @@ get_more_post_data(CliSock, PPS, ARG) ->
         Len ->
             Int_len = list_to_integer(Len),
             if N + PPS < Int_len ->
-                    Bin = get_client_data(ARG#arg.clisock, ARG#arg.client_ip_port, N, yaws:is_ssl(SC)),
+                    Bin = get_client_data(CliSock, ARG#arg.client_ip_port, N, yaws:is_ssl(SC)),
                     {partial, Bin};
                true ->
-                    get_client_data(ARG#arg.clisock, ARG#arg.client_ip_port, Int_len - PPS,
+                    get_client_data(CliSock, ARG#arg.client_ip_port, Int_len - PPS,
                                     yaws:is_ssl(SC))
             end
     end.
