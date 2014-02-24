@@ -196,7 +196,15 @@ do_send(Out, SocketFd, Filename, Offset, Count) ->
 enabled() ->
     false.
 send(Out, Filename, Offset, Count) ->
-    compat_send(Out, Filename, Offset, Count).
+    LogRes = compat_send(Out, Filename, Offset, Count),
+    put(yaws_sendfile_results, LogRes),
+    case LogRes of
+	{send_error, Err, _BytesSent} ->
+	    Err;
+	_ ->
+	    LogRes
+    end.
+
 start_link() ->
     ignore.
 start() ->
@@ -229,7 +237,7 @@ loop_send(Fd, ChunkSize, {ok, Bin}, Out, all, BytesSent) ->
             loop_send(Fd, ChunkSize, file:read(Fd, ChunkSize), Out, all,
                       BytesSent+size(Bin));
         Err ->
-            Err
+            {send_error, Err, BytesSent} 
     end;
 loop_send(_Fd, _ChunkSize, eof, _Out, _, BytesSent) ->
     {ok, BytesSent};
@@ -241,21 +249,22 @@ loop_send(Fd, ChunkSize, {ok, Bin}, Out, Count, BytesSent) ->
                     loop_send(Fd, ChunkSize, file:read(Fd, ChunkSize),
                               Out, Count-Sz, BytesSent+Sz);
                 Err ->
-                    Err
+                    {send_error, Err, BytesSent}
             end;
        Sz == Count ->
             case gen_tcp:send(Out, Bin) of
                 ok  -> {ok, BytesSent+Sz};
-                Err -> Err
+                Err -> 
+                    {send_error, Err, BytesSent}
             end;
        Sz > Count ->
             <<Deliver:Count/binary , _/binary>> = Bin,
             case gen_tcp:send(Out, Deliver) of
                 ok  -> {ok, BytesSent+Count};
-                Err -> Err
+                Err -> {send_error, Err, BytesSent}
             end
     end;
-loop_send(_Fd, _, Err, _, _, _) ->
-    Err.
+loop_send(_Fd, _, Err, _, _, BytesSent) ->
+    {send_error, Err, BytesSent}.
 
 -endif.
