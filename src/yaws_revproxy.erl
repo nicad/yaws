@@ -11,6 +11,7 @@
 -include("../include/yaws_api.hrl").
 -include("yaws_debug.hrl").
 -export([out/1]).
+-export([out404/1]).
 
 
 %% reverse proxy implementation.
@@ -75,7 +76,7 @@ out(#arg{req=Req, headers=Hdrs, state=#proxy_cfg{url=ConfURL}=State}=Arg) ->
             out(Arg#arg{state=RPState});
         _ERR ->
             ?Debug("Connection failed: ~p~n", [_ERR]),
-            out404(Arg)
+            outXXX(503, Arg)
     end;
 
 
